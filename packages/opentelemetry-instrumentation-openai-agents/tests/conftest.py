@@ -14,7 +14,6 @@ from opentelemetry.instrumentation.openai_agents import (
     OpenAIAgentsInstrumentor,
 )
 from opentelemetry.instrumentation.openai_agents.config import Config
-from opentelemetry.trace import set_tracer_provider
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader
@@ -61,18 +60,38 @@ def mock_set_agent_name():
     return SET_AGENT_NAME_MOCK
 
 
-@pytest.fixture(scope="session")
+def _reset_openai_agents_instrumentation():
+    try:
+        instrumentor = OpenAIAgentsInstrumentor()
+        if instrumentor.is_instrumented_by_opentelemetry:
+            instrumentor.uninstrument()
+    except Exception:
+        pass
+    try:
+        from agents import set_trace_processors
+
+        set_trace_processors([])
+    except Exception:
+        pass
+    Config.use_legacy_attributes = True
+    Config.event_logger = None
+
+
+@pytest.fixture
 def exporter():
     exporter = InMemorySpanExporter()
     processor = SimpleSpanProcessor(exporter)
 
     provider = TracerProvider()
     provider.add_span_processor(processor)
-    set_tracer_provider(provider)
 
-    OpenAIAgentsInstrumentor().instrument()
+    _reset_openai_agents_instrumentation()
+    instrumentor = OpenAIAgentsInstrumentor(replace_existing_processors=True)
+    instrumentor.instrument(tracer_provider=provider)
 
-    return exporter
+    yield exporter
+
+    _reset_openai_agents_instrumentation()
 
 
 @pytest.fixture(autouse=True)
@@ -89,19 +108,17 @@ def clear_exporter(exporter):
     # Hook-based approach: cleanup handled automatically
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def metrics_test_context():
     resource = Resource.create()
     reader = InMemoryMetricReader()
     provider = MeterProvider(metric_readers=[reader], resource=resource)
     metrics.set_meter_provider(provider)
-    OpenAIAgentsInstrumentor().instrument(meter_provider=provider)
-    return provider, reader
-
-
-@pytest.fixture(scope="session", autouse=True)
-def clear_metrics_test_context(metrics_test_context):
-    provider, reader = metrics_test_context
+    _reset_openai_agents_instrumentation()
+    instrumentor = OpenAIAgentsInstrumentor(replace_existing_processors=True)
+    instrumentor.instrument(meter_provider=provider)
+    yield provider, reader
+    _reset_openai_agents_instrumentation()
     reader.shutdown()
     provider.shutdown()
 
@@ -354,9 +371,12 @@ def instrument_with_content(span_exporter, event_logger_provider):
     tracer_provider = TracerProvider()
     processor = SimpleSpanProcessor(span_exporter)
     tracer_provider.add_span_processor(processor)
-    set_tracer_provider(tracer_provider)
 
-    instrumentor = OpenAIAgentsInstrumentor(use_legacy_attributes=False)
+    _reset_openai_agents_instrumentation()
+    instrumentor = OpenAIAgentsInstrumentor(
+        use_legacy_attributes=False,
+        replace_existing_processors=True,
+    )
     instrumentor.instrument(
         tracer_provider=tracer_provider,
         event_logger_provider=event_logger_provider,
@@ -364,10 +384,8 @@ def instrument_with_content(span_exporter, event_logger_provider):
 
     yield instrumentor
 
-    Config.use_legacy_attributes = True
-    Config.event_logger = None
     os.environ.pop(TRACELOOP_TRACE_CONTENT, None)
-    instrumentor.uninstrument()
+    _reset_openai_agents_instrumentation()
 
 
 @pytest.fixture(scope="function")
@@ -382,9 +400,12 @@ def instrument_with_no_content(span_exporter, event_logger_provider):
     tracer_provider = TracerProvider()
     processor = SimpleSpanProcessor(span_exporter)
     tracer_provider.add_span_processor(processor)
-    set_tracer_provider(tracer_provider)
 
-    instrumentor = OpenAIAgentsInstrumentor(use_legacy_attributes=False)
+    _reset_openai_agents_instrumentation()
+    instrumentor = OpenAIAgentsInstrumentor(
+        use_legacy_attributes=False,
+        replace_existing_processors=True,
+    )
     instrumentor.instrument(
         tracer_provider=tracer_provider,
         event_logger_provider=event_logger_provider,
@@ -392,7 +413,5 @@ def instrument_with_no_content(span_exporter, event_logger_provider):
 
     yield instrumentor
 
-    Config.use_legacy_attributes = True
-    Config.event_logger = None
     os.environ.pop(TRACELOOP_TRACE_CONTENT, None)
-    instrumentor.uninstrument()
+    _reset_openai_agents_instrumentation()

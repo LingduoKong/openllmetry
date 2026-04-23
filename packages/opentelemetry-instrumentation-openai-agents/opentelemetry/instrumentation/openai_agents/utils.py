@@ -1,6 +1,7 @@
 import asyncio
 import dataclasses
 import functools
+import inspect
 import json
 import logging
 import os
@@ -95,4 +96,4 @@ def dont_throw(func):
             traceback.format_exc(),
         )
 
-    return async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper
+    return async_wrapper if inspect.iscoroutinefunction(func) else sync_wrapper

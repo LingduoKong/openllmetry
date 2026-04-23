@@ -41,6 +41,7 @@ class OpenAIAgentsInstrumentor(BaseInstrumentor):
         super().__init__()
         Config.exception_logger = exception_logger
         Config.use_legacy_attributes = use_legacy_attributes
+        Config.event_logger = None
         self._replace_existing_processors: bool = replace_existing_processors
 
     def instrumentation_dependencies(self) -> Collection[str]:
@@ -102,6 +103,17 @@ class OpenAIAgentsInstrumentor(BaseInstrumentor):
             unwrap_realtime_session()
         except Exception:
             pass
+
+        if self._replace_existing_processors:
+            try:
+                from agents import set_trace_processors
+
+                set_trace_processors([])
+            except Exception:
+                pass
+
+        Config.use_legacy_attributes = True
+        Config.event_logger = None
 
 
 def is_metrics_enabled() -> bool:
