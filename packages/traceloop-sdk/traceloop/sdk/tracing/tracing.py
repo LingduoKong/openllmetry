@@ -37,6 +37,8 @@ from traceloop.sdk.utils.package_check import is_package_installed
 from typing import Callable, Dict, List, Optional, Set, Union
 from opentelemetry.semconv._incubating.attributes.gen_ai_attributes import (
     GEN_AI_AGENT_NAME,
+    GEN_AI_CONVERSATION_ID,
+    GEN_AI_OPERATION_NAME,
 )
 
 
@@ -49,6 +51,7 @@ EXCLUDED_URLS = """
     openai.azure.com,
     api.anthropic.com,
     api.cohere.ai,
+    api.voyageai.com,
     pinecone.io,
     traceloop.com,
     posthog.com,
@@ -251,6 +254,19 @@ def set_agent_name(agent_name: str) -> None:
     attach(set_value("agent_name", agent_name))
 
 
+def set_conversation_id(conversation_id: str) -> None:
+    """
+    Set the conversation ID for the current context.
+
+    This ID will be applied to all spans within the conversation context,
+    following the OpenTelemetry GenAI semantic convention for gen_ai.conversation.id.
+
+    Args:
+        conversation_id: Unique identifier for the conversation/session
+    """
+    attach(set_value("conversation_id", conversation_id))
+
+
 def set_entity_path(entity_path: str) -> None:
     attach(set_value("entity_path", entity_path))
 
@@ -288,7 +304,10 @@ def set_external_prompt_tracing_context(
 
 
 def is_llm_span(span) -> bool:
-    return span.attributes.get(SpanAttributes.LLM_REQUEST_TYPE) is not None
+    return (
+        span.attributes.get(SpanAttributes.LLM_REQUEST_TYPE) is not None
+        or span.attributes.get(GEN_AI_OPERATION_NAME) is not None
+    )
 
 
 def init_spans_exporter(api_endpoint: str, headers: Dict[str, str]) -> SpanExporter:
@@ -344,6 +363,10 @@ def default_span_processor_on_start(span: Span, parent_context: Context | None =
     agent_name = get_value("agent_name")
     if agent_name is not None:
         span.set_attribute(GEN_AI_AGENT_NAME, str(agent_name))
+
+    conversation_id = get_value("conversation_id")
+    if conversation_id is not None:
+        span.set_attribute(GEN_AI_CONVERSATION_ID, str(conversation_id))
 
     entity_path = get_value("entity_path")
     if entity_path is not None:
@@ -566,6 +589,9 @@ def init_instrumentations(
                 instrument_set = True
         elif instrument == Instruments.VERTEXAI:
             if init_vertexai_instrumentor(should_enrich_metrics, base64_image_uploader):
+                instrument_set = True
+        elif instrument == Instruments.VOYAGEAI:
+            if init_voyageai_instrumentor():
                 instrument_set = True
         elif instrument == Instruments.WATSONX:
             if init_watsonx_instrumentor():
@@ -937,10 +963,24 @@ def init_vertexai_instrumentor(
     return False
 
 
+def init_voyageai_instrumentor():
+    try:
+        if is_package_installed("voyageai"):
+            from opentelemetry.instrumentation.voyageai import VoyageAIInstrumentor
+
+            instrumentor = VoyageAIInstrumentor()
+            if not instrumentor.is_instrumented_by_opentelemetry:
+                instrumentor.instrument()
+            return True
+    except Exception as e:
+        logging.warning(f"Error initializing Voyage AI instrumentor: {e}")
+    return False
+
+
 def init_watsonx_instrumentor():
     try:
         if is_package_installed("ibm-watsonx-ai") or is_package_installed(
-            "ibm-watson-machine-learning"
+            "ibm_watson_machine_learning"
         ):
             from opentelemetry.instrumentation.watsonx import WatsonxInstrumentor
 

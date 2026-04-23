@@ -89,6 +89,13 @@ class CreateDatasetRequest(BaseModel):
     rows: Optional[List[ValuesMap]] = None
 
 
+class OverrideDatasetRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    columns: Optional[List[ColumnDefinition]] = None
+    rows: Optional[List[ValuesMap]] = None
+
+
 class RowObject(BaseModel):
     id: str
     values: ValuesMap
@@ -148,12 +155,19 @@ class UpdateRowInput(BaseModel):
     values: ValuesMap
 
 
+class DatasetVersion(BaseModel):
+    version: str
+    published_by: Optional[str] = None
+    published_at: datetime.datetime
+
+
 class DatasetMetadata(BaseModel):
     id: str
     slug: str
-    name: str
+    name: Optional[str] = None
     description: Optional[str] = None
     last_version: Optional[str] = None
+    versions: Optional[List[DatasetVersion]] = None
     columns: Optional[Dict[str, ColumnDefinition]] = None
     created_at: datetime.datetime
     updated_at: datetime.datetime

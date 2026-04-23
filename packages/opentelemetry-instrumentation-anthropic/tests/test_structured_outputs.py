@@ -4,7 +4,6 @@ import pytest
 from opentelemetry.semconv._incubating.attributes import (
     gen_ai_attributes as GenAIAttributes,
 )
-from opentelemetry.semconv_ai import SpanAttributes
 
 
 JOKE_SCHEMA = {
@@ -51,23 +50,17 @@ def test_anthropic_structured_outputs_legacy(
     assert spans[0].name == "anthropic.chat"
 
     anthropic_span = spans[0]
-    assert (
-        anthropic_span.attributes[f"{GenAIAttributes.GEN_AI_PROMPT}.0.content"]
-        == "Tell me a joke about OpenTelemetry and rate it from 1 to 10"
-    )
-    assert anthropic_span.attributes[f"{GenAIAttributes.GEN_AI_PROMPT}.0.role"] == "user"
-    assert (
-        anthropic_span.attributes.get(f"{GenAIAttributes.GEN_AI_COMPLETION}.0.content")
-        == response.content[0].text
-    )
-    assert (
-        anthropic_span.attributes.get(f"{GenAIAttributes.GEN_AI_COMPLETION}.0.role")
-        == "assistant"
-    )
+    input_messages = json.loads(anthropic_span.attributes[GenAIAttributes.GEN_AI_INPUT_MESSAGES])
+    assert input_messages[0]["parts"][0]["content"] == "Tell me a joke about OpenTelemetry and rate it from 1 to 10"
+    assert input_messages[0]["role"] == "user"
+    output_messages = json.loads(anthropic_span.attributes[GenAIAttributes.GEN_AI_OUTPUT_MESSAGES])
+    text_parts = [p for p in output_messages[-1]["parts"] if p["type"] == "text"]
+    assert text_parts[0]["content"] == response.content[0].text
+    assert output_messages[-1]["role"] == "assistant"
 
-    assert SpanAttributes.LLM_REQUEST_STRUCTURED_OUTPUT_SCHEMA in anthropic_span.attributes
+    assert "gen_ai.request.structured_output_schema" in anthropic_span.attributes
     schema_attr = json.loads(
-        anthropic_span.attributes[SpanAttributes.LLM_REQUEST_STRUCTURED_OUTPUT_SCHEMA]
+        anthropic_span.attributes["gen_ai.request.structured_output_schema"]
     )
     assert "properties" in schema_attr
     assert "joke" in schema_attr["properties"]

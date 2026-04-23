@@ -110,7 +110,7 @@ def _parse_tool_calls_for_event(tool_calls_raw) -> Optional[List[ToolCall]]:
     return parsed_tool_calls if parsed_tool_calls else None
 
 
-def _extract_prompt_attributes(otel_span, input_data):
+def _extract_prompt_attributes(otel_span, input_data, trace_content: bool):
     """
     Extract prompt/input data from messages and set them as span attributes.
 
@@ -169,10 +169,15 @@ def _extract_prompt_attributes(otel_span, input_data):
                     {
                         "id": msg.get("id", ""),
                         "name": msg.get("name", ""),
-                        "arguments": msg.get("arguments", ""),
-                    }
+                    } | (
+                        {"arguments": msg.get("arguments", "")}
+                        if trace_content else {}
+                    )
                 ]
-            elif msg_type == "function_call_output":
+            elif (
+                msg_type == "function_call_output"
+                and trace_content
+            ):
                 # Tool outputs are tool messages
                 role = "tool"
                 content = msg.get("output")
@@ -207,7 +212,7 @@ def _extract_prompt_attributes(otel_span, input_data):
             otel_span.set_attribute(f"{prefix}.role", role)
 
         # Set content attribute
-        if content is not None:
+        if content is not None and trace_content:
             if not isinstance(content, str):
                 content = json.dumps(content)
             otel_span.set_attribute(f"{prefix}.content", content)
@@ -254,14 +259,14 @@ def _extract_prompt_attributes(otel_span, input_data):
                     otel_span.set_attribute(
                         f"{prefix}.tool_calls.{j}.name", tool_call["name"]
                     )
-                if tool_call.get("arguments"):
+                if tool_call.get("arguments") and trace_content:
                     args = tool_call["arguments"]
                     if not isinstance(args, str):
                         args = json.dumps(args)
                     otel_span.set_attribute(f"{prefix}.tool_calls.{j}.arguments", args)
 
 
-def _extract_response_attributes(otel_span, response):
+def _extract_response_attributes(otel_span, response, trace_content: bool):
     """
     Extract model settings, completions, and usage from a response object
     and set them as span attributes.
@@ -401,14 +406,23 @@ def _extract_response_attributes(otel_span, response):
                     tc["function"]["function_name"],
                 )
                 otel_span.set_attribute(
-                    f"{GenAIAttributes.GEN_AI_COMPLETION}.{i}.tool_calls.0.arguments",
-                    json.dumps(tc["function"]["arguments"])
-                    if isinstance(tc["function"]["arguments"], dict)
-                    else tc["function"]["arguments"],
-                )
-                otel_span.set_attribute(
                     f"{GenAIAttributes.GEN_AI_COMPLETION}.{i}.tool_calls.0.id",
                     tc["id"],
+                )
+                if trace_content:
+                    arguments = tc["function"]["arguments"]
+                    if isinstance(arguments, dict):
+                        arguments = json.dumps(arguments)
+                    otel_span.set_attribute(
+                        f"{GenAIAttributes.GEN_AI_COMPLETION}.{i}.tool_calls.0.arguments",
+                        arguments,
+                    )
+
+            # Add finish reason if available (for non-tool-call cases)
+            if hasattr(response, "finish_reason") and not hasattr(output, "name"):
+                otel_span.set_attribute(
+                    f"{GenAIAttributes.GEN_AI_COMPLETION}.{i}.finish_reason",
+                    response.finish_reason,
                 )
 
     # Extract usage data (always set these as span attributes)
@@ -779,6 +793,7 @@ class OpenTelemetryTracingProcessor(TracingProcessor):
         if span in self._otel_spans:
             otel_span = self._otel_spans[span]
             span_data = getattr(span, "span_data", None)
+            trace_content = should_send_prompts()
 
             # Handle FunctionSpanData (tool calls)
             if isinstance(span_data, FunctionSpanData):
@@ -790,11 +805,15 @@ class OpenTelemetryTracingProcessor(TracingProcessor):
             ):
                 # Extract prompt data from input
                 input_data = getattr(span_data, "input", [])
-                _extract_prompt_attributes(otel_span, input_data)
+                _extract_prompt_attributes(otel_span, input_data, trace_content)
 
                 # Add function/tool specifications to the request using OpenAI semantic conventions
                 response = getattr(span_data, "response", None)
-                if response and hasattr(response, "tools") and response.tools:
+                if (
+                    response
+                    and hasattr(response, "tools")
+                    and response.tools
+                ):
                     # Extract tool specifications
                     for i, tool in enumerate(response.tools):
                         if hasattr(tool, "function"):
@@ -830,23 +849,28 @@ class OpenTelemetryTracingProcessor(TracingProcessor):
                                 )
 
                 if response:
-                    model_settings = _extract_response_attributes(otel_span, response)
+                    model_settings = _extract_response_attributes(
+                        otel_span, response, trace_content
+                    )
                     self._last_model_settings = model_settings
 
             # Legacy fallback for other span types
             elif span_data:
                 input_data = getattr(span_data, "input", [])
-                _extract_prompt_attributes(otel_span, input_data)
+                _extract_prompt_attributes(otel_span, input_data, trace_content)
 
                 response = getattr(span_data, "response", None)
                 if response:
-                    model_settings = _extract_response_attributes(otel_span, response)
+                    model_settings = _extract_response_attributes(
+                        otel_span, response, trace_content
+                    )
                     self._last_model_settings = model_settings
 
             elif (
                 _has_realtime_spans
                 and SpeechSpanData
                 and isinstance(span_data, SpeechSpanData)
+                and trace_content
             ):
                 input_text = getattr(span_data, "input", None)
                 if input_text:
@@ -869,6 +893,7 @@ class OpenTelemetryTracingProcessor(TracingProcessor):
                 _has_realtime_spans
                 and TranscriptionSpanData
                 and isinstance(span_data, TranscriptionSpanData)
+                and trace_content
             ):
                 input_audio = getattr(span_data, "input", None)
                 if input_audio:
@@ -891,6 +916,7 @@ class OpenTelemetryTracingProcessor(TracingProcessor):
                 _has_realtime_spans
                 and SpeechGroupSpanData
                 and isinstance(span_data, SpeechGroupSpanData)
+                and trace_content
             ):
                 input_text = getattr(span_data, "input", None)
                 if input_text:

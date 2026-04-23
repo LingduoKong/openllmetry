@@ -6,7 +6,7 @@ from .field_mapping import normalize_task_output, get_field_suggestions, format_
 from .model import (
     InputExtractor,
     InputSchemaMapping,
-    ExecuteEvaluatorRequest,
+    ExecuteEvaluatorInExperimentRequest,
     ExecuteEvaluatorResponse,
     ExecutionResponse,
 )
@@ -15,12 +15,17 @@ from .config import EvaluatorDetails
 from ..generated.evaluators import get_request_model
 
 
-def _validate_evaluator_input(slug: str, input: Dict[str, str]) -> None:
+def _validate_evaluator_input(
+    slug: str,
+    input: Dict[str, str],
+    evaluator_config: Optional[Dict[str, Any]] = None,
+) -> None:
     """Validate input against the evaluator's request model if available.
 
     Args:
         slug: The evaluator slug (e.g., "pii-detector")
         input: Dictionary of input field names to values
+        evaluator_config: Optional configuration for the evaluator
 
     Raises:
         ValueError: If input fails validation against the request model
@@ -28,8 +33,11 @@ def _validate_evaluator_input(slug: str, input: Dict[str, str]) -> None:
     request_model = get_request_model(slug)
     if request_model:
         try:
-            # Request models expect data nested under 'input' field
-            request_model(input=input)
+            # Build kwargs for request model validation
+            kwargs: Dict[str, Any] = {"input": input}
+            if evaluator_config is not None:
+                kwargs["config"] = evaluator_config
+            request_model(**kwargs)
         except ValidationError as e:
             raise ValueError(f"Invalid input for '{slug}': {e}") from e
 
@@ -45,37 +53,82 @@ class Evaluator:
         self._async_http_client = async_http_client
 
     @staticmethod
-    def _build_evaluator_request(
+    def _build_evaluator_in_experiment_request(
+        evaluator_slug: str,
         task_id: str,
         experiment_id: str,
         experiment_run_id: str,
         input: Dict[str, str],
         evaluator_version: Optional[str] = None,
         evaluator_config: Optional[Dict[str, Any]] = None,
-    ) -> ExecuteEvaluatorRequest:
+    ) -> ExecuteEvaluatorInExperimentRequest:
         """Build evaluator request with common parameters"""
         schema_mapping = InputSchemaMapping(
             root={k: InputExtractor(source=v) for k, v in input.items()}
         )
-        return ExecuteEvaluatorRequest(
+        return ExecuteEvaluatorInExperimentRequest(
             input_schema_mapping=schema_mapping,
             evaluator_version=evaluator_version,
             evaluator_config=evaluator_config,
+            evaluator_slug=evaluator_slug,
             task_id=task_id,
             experiment_id=experiment_id,
             experiment_run_id=experiment_run_id,
         )
 
-    async def _execute_evaluator_request(
+    async def execute(
         self,
         evaluator_slug: str,
-        request: ExecuteEvaluatorRequest,
+        input: Dict[str, Any],
+        timeout_in_sec: int = 120,
+        evaluator_version: Optional[str] = None,
+        evaluator_config: Optional[Dict[str, Any]] = None,
+    ) -> ExecutionResponse:
+        """Execute an evaluator via /v2/evaluators/{slug}/executions (trigger + SSE stream)."""
+        _validate_evaluator_input(evaluator_slug, input, evaluator_config)
+
+        schema_mapping = InputSchemaMapping(
+            root={k: InputExtractor(source=v) for k, v in input.items()}
+        )
+        body: Dict[str, Any] = {"input_schema_mapping": schema_mapping.model_dump()}
+        if evaluator_version is not None:
+            body["evaluator_version"] = evaluator_version
+        if evaluator_config is not None:
+            body["evaluator_config"] = evaluator_config
+
+        full_url = f"/v2/evaluators/{evaluator_slug}/executions"
+        response = await self._async_http_client.post(
+            full_url, json=body, timeout=httpx.Timeout(timeout_in_sec)
+        )
+        if response.status_code != 200:
+            error_detail = _extract_error_from_response(response)
+            raise Exception(
+                f"Failed to trigger evaluator '{evaluator_slug}': "
+                f"{response.status_code} - {error_detail}"
+            )
+        result_data = response.json()
+        execute_response = ExecuteEvaluatorResponse(**result_data)
+
+        sse_client = SSEClient(shared_client=self._async_http_client)
+        return await sse_client.wait_for_result(
+            execute_response.execution_id,
+            execute_response.stream_url,
+            timeout_in_sec,
+        )
+
+    async def _execute_evaluator_in_experiment_request(
+        self,
+        evaluator_slug: str,
+        experiment_slug: str,
+        experiment_run_id: str,
+        task_id: str,
+        request: ExecuteEvaluatorInExperimentRequest,
         timeout_in_sec: int = 120,
     ) -> ExecuteEvaluatorResponse:
         """Execute evaluator request and return response"""
         body = request.model_dump()
         client = self._async_http_client
-        full_url = f"/v2/evaluators/slug/{evaluator_slug}/execute"
+        full_url = f"/v2/experiments/{experiment_slug}/runs/{experiment_run_id}/tasks/{task_id}"
         response = await client.post(
             full_url, json=body, timeout=httpx.Timeout(timeout_in_sec)
         )
@@ -91,6 +144,7 @@ class Evaluator:
     async def run_experiment_evaluator(
         self,
         evaluator_slug: str,
+        experiment_slug: str,
         task_id: str,
         experiment_id: str,
         experiment_run_id: str,
@@ -115,14 +169,14 @@ class Evaluator:
         Returns:
             ExecutionResponse: The evaluation result from SSE stream
         """
-        _validate_evaluator_input(evaluator_slug, input)
+        _validate_evaluator_input(evaluator_slug, input, evaluator_config)
 
-        request = self._build_evaluator_request(
-            task_id, experiment_id, experiment_run_id, input, evaluator_version, evaluator_config
+        request = self._build_evaluator_in_experiment_request(
+            evaluator_slug, task_id, experiment_id, experiment_run_id, input, evaluator_version, evaluator_config
         )
 
-        execute_response = await self._execute_evaluator_request(
-            evaluator_slug, request, timeout_in_sec
+        execute_response = await self._execute_evaluator_in_experiment_request(
+            evaluator_slug, experiment_slug, experiment_run_id, task_id, request, timeout_in_sec
         )
 
         sse_client = SSEClient(shared_client=self._async_http_client)
@@ -137,6 +191,7 @@ class Evaluator:
     async def trigger_experiment_evaluator(
         self,
         evaluator_slug: str,
+        experiment_slug: str,
         task_id: str,
         experiment_id: str,
         experiment_run_id: str,
@@ -159,14 +214,14 @@ class Evaluator:
         Returns:
             str: The execution_id that can be used to check results later
         """
-        _validate_evaluator_input(evaluator_slug, input)
+        _validate_evaluator_input(evaluator_slug, input, evaluator_config)
 
-        request = self._build_evaluator_request(
-            task_id, experiment_id, experiment_run_id, input, evaluator_version, evaluator_config
+        request = self._build_evaluator_in_experiment_request(
+            evaluator_slug, task_id, experiment_id, experiment_run_id, input, evaluator_version, evaluator_config
         )
 
-        execute_response = await self._execute_evaluator_request(
-            evaluator_slug, request, 120
+        execute_response = await self._execute_evaluator_in_experiment_request(
+            evaluator_slug, experiment_slug, experiment_run_id, task_id, request, 120
         )
 
         # Return execution_id without waiting for SSE result

@@ -7,29 +7,31 @@ class GenAISystem(Enum):
     """
     Supported LLM vendor (System) names used across OpenLLMetry instrumentations.
 
-    These values match the actual strings used in span attributes (LLM_SYSTEM)
-    throughout the instrumentation packages.
+    Values that have a counterpart in the official OTel GenAI semantic conventions
+    (opentelemetry.semconv._incubating.attributes.gen_ai_attributes.GenAiSystemValues)
+    use the spec-defined lowercase string. Values without an OTel counterpart use
+    lowercase-with-underscores as a project convention.
     """
 
     OPENAI = "openai"
-    ANTHROPIC = "Anthropic"
-    COHERE = "Cohere"
-    MISTRALAI = "MistralAI"
-    OLLAMA = "Ollama"
-    GROQ = "Groq"
-    ALEPH_ALPHA = "AlephAlpha"
-    REPLICATE = "Replicate"
-    TOGETHER_AI = "TogetherAI"
-    WATSONX = "Watsonx"
-    HUGGINGFACE = "HuggingFace"
-    FIREWORKS = "Fireworks"
+    ANTHROPIC = "anthropic"
+    COHERE = "cohere"
+    MISTRALAI = "mistral_ai"
+    OLLAMA = "ollama"
+    GROQ = "groq"
+    ALEPH_ALPHA = "aleph_alpha"
+    REPLICATE = "replicate"
+    TOGETHER_AI = "together_ai"
+    WATSONX = "ibm.watsonx.ai"
+    HUGGINGFACE = "hugging_face"
+    FIREWORKS = "fireworks"
 
-    AZURE = "Azure"
-    AWS = "AWS"
-    GOOGLE = "Google"
-    OPENROUTER = "OpenRouter"
+    AZURE = "az.ai.openai"
+    AWS = "aws.bedrock"
+    GOOGLE = "gcp.gen_ai"
+    OPENROUTER = "openrouter"
 
-    LANGCHAIN = "Langchain"
+    LANGCHAIN = "langchain"
     CREWAI = "crewai"
 
 
@@ -62,38 +64,32 @@ class Meters:
 
 
 class SpanAttributes:
-    # GenAI Usage Cache Attributes (missing from incubating semantic conventions)
-    GEN_AI_USAGE_CACHE_CREATION_INPUT_TOKENS = "gen_ai.usage.cache_creation_input_tokens"
-    GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS = "gen_ai.usage.cache_read_input_tokens"
+    # GenAI Usage Cache Attributes (not yet in upstream OTel incubating semconv)
+    GEN_AI_USAGE_CACHE_CREATION_INPUT_TOKENS = "gen_ai.usage.cache_creation.input_tokens"
+    GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS = "gen_ai.usage.cache_read.input_tokens"
 
-    # LLM Cache Attributes (legacy naming - keeping for backward compatibility)
-    LLM_USAGE_CACHE_CREATION_INPUT_TOKENS = "gen_ai.usage.cache_creation_input_tokens"
-    LLM_USAGE_CACHE_READ_INPUT_TOKENS = "gen_ai.usage.cache_read_input_tokens"
-
-    # LLM
-    LLM_REQUEST_TYPE = "llm.request.type"
-    LLM_USAGE_TOTAL_TOKENS = "llm.usage.total_tokens"
-    LLM_USAGE_TOKEN_TYPE = "llm.usage.token_type"
-    LLM_USER = "llm.user"
-    LLM_HEADERS = "llm.headers"
-    LLM_TOP_K = "llm.top_k"
-    LLM_IS_STREAMING = "llm.is_streaming"
-    LLM_FREQUENCY_PENALTY = "llm.frequency_penalty"
-    LLM_PRESENCE_PENALTY = "llm.presence_penalty"
-    LLM_CHAT_STOP_SEQUENCES = "llm.chat.stop_sequences"
-    LLM_REQUEST_FUNCTIONS = "llm.request.functions"
-    LLM_REQUEST_REPETITION_PENALTY = "llm.request.repetition_penalty"
-    LLM_RESPONSE_FINISH_REASON = "llm.response.finish_reason"
-    LLM_RESPONSE_STOP_REASON = "llm.response.stop_reason"
-    LLM_CONTENT_COMPLETION_CHUNK = "llm.content.completion.chunk"
-    LLM_REQUEST_REASONING_EFFORT = "llm.request.reasoning_effort"
-    LLM_USAGE_REASONING_TOKENS = "llm.usage.reasoning_tokens"
+    # LLM — project-policy attributes (not in upstream OTel spec)
+    GEN_AI_USAGE_TOTAL_TOKENS = "gen_ai.usage.total_tokens"
+    GEN_AI_USAGE_TOKEN_TYPE = "gen_ai.usage.token_type"
+    GEN_AI_USER = "gen_ai.user"
+    GEN_AI_HEADERS = "gen_ai.headers"
+    GEN_AI_IS_STREAMING = "gen_ai.is_streaming"
+    GEN_AI_REQUEST_REPETITION_PENALTY = "gen_ai.request.repetition_penalty"
+    GEN_AI_RESPONSE_FINISH_REASON = "gen_ai.response.finish_reason"
+    GEN_AI_RESPONSE_STOP_REASON = "gen_ai.response.stop_reason"
+    GEN_AI_CONTENT_COMPLETION_CHUNK = "gen_ai.content.completion.chunk"
+    GEN_AI_REQUEST_REASONING_EFFORT = "gen_ai.request.reasoning_effort"
+    GEN_AI_USAGE_REASONING_TOKENS = "gen_ai.usage.reasoning_tokens"
+    GEN_AI_REQUEST_N = "gen_ai.request.n"
+    GEN_AI_REQUEST_MAX_COMPLETION_TOKENS = "gen_ai.request.max_completion_tokens"
+    GEN_AI_REQUEST_STRUCTURED_OUTPUT_SCHEMA = "gen_ai.request.structured_output_schema"
+    GEN_AI_REQUEST_REASONING_SUMMARY = "gen_ai.request.reasoning_summary"
+    GEN_AI_RESPONSE_REASONING_EFFORT = "gen_ai.response.reasoning_effort"
 
     # OpenAI
-    LLM_OPENAI_RESPONSE_SYSTEM_FINGERPRINT = "gen_ai.openai.system_fingerprint"
-    LLM_OPENAI_API_BASE = "gen_ai.openai.api_base"
-    LLM_OPENAI_API_VERSION = "gen_ai.openai.api_version"
-    LLM_OPENAI_API_TYPE = "gen_ai.openai.api_type"
+    GEN_AI_OPENAI_API_BASE = "gen_ai.openai.api_base"
+    GEN_AI_OPENAI_API_VERSION = "gen_ai.openai.api_version"
+    GEN_AI_OPENAI_API_TYPE = "gen_ai.openai.api_type"
 
     # Haystack
     HAYSTACK_OPENAI_CHAT = "haystack.openai.chat"
@@ -138,11 +134,80 @@ class SpanAttributes:
     TRACELOOP_CORRELATION_ID = "traceloop.correlation.id"
 
     # Watson/genai LLM
+    GEN_AI_WATSONX_DECODING_METHOD = "llm.watsonx.decoding_method"
+    GEN_AI_WATSONX_RANDOM_SEED = "llm.watsonx.random_seed"
+    GEN_AI_WATSONX_MAX_NEW_TOKENS = "llm.watsonx.max_new_tokens"
+    GEN_AI_WATSONX_MIN_NEW_TOKENS = "llm.watsonx.min_new_tokens"
+    GEN_AI_WATSONX_REPETITION_PENALTY = "llm.watsonx.repetition_penalty"
+
+    # -----------------------------------------------------------------------
+    # Legacy LLM_* aliases (old names with original string values)
+    # These constants were removed or renamed in v0.5.0.
+    # Kept so non-migrated instrumentation packages continue to work.
+    # TODO: Remove once all instrumentation packages are migrated.
+    # -----------------------------------------------------------------------
+
+    # Removed from SpanAttributes in v0.5.0 (now in upstream OTel gen_ai_attributes)
+    # TODO: migrate each to its GenAIAttributes.GEN_AI_* counterpart
+    LLM_SYSTEM = "gen_ai.system"
+    LLM_REQUEST_MODEL = "gen_ai.request.model"
+    LLM_REQUEST_MAX_TOKENS = "gen_ai.request.max_tokens"
+    LLM_REQUEST_TEMPERATURE = "gen_ai.request.temperature"
+    LLM_REQUEST_TOP_P = "gen_ai.request.top_p"
+    LLM_PROMPTS = "gen_ai.prompt"
+    LLM_COMPLETIONS = "gen_ai.completion"
+    LLM_RESPONSE_MODEL = "gen_ai.response.model"
+    LLM_USAGE_COMPLETION_TOKENS = "gen_ai.usage.completion_tokens"
+    LLM_USAGE_PROMPT_TOKENS = "gen_ai.usage.prompt_tokens"
+    LLM_TOKEN_TYPE = "gen_ai.token.type"
+    LLM_OPENAI_RESPONSE_SYSTEM_FINGERPRINT = "gen_ai.openai.system_fingerprint"
+    LLM_FREQUENCY_PENALTY = "llm.frequency_penalty"
+    LLM_PRESENCE_PENALTY = "llm.presence_penalty"
+    LLM_TOP_K = "llm.top_k"
+    LLM_CHAT_STOP_SEQUENCES = "llm.chat.stop_sequences"
+    LLM_REQUEST_FUNCTIONS = "llm.request.functions"
+    LLM_REQUEST_TYPE = "llm.request.type"
+
+    # Renamed LLM_* -> GEN_AI_* in v0.5.0 (name AND value changed: llm.* -> gen_ai.*)
+    # TODO: migrate each to its SpanAttributes.GEN_AI_* counterpart
+    LLM_USAGE_TOTAL_TOKENS = "llm.usage.total_tokens"
+    LLM_USAGE_TOKEN_TYPE = "llm.usage.token_type"
+    LLM_USER = "llm.user"
+    LLM_HEADERS = "llm.headers"
+    LLM_IS_STREAMING = "llm.is_streaming"
+    LLM_REQUEST_REPETITION_PENALTY = "llm.request.repetition_penalty"
+    LLM_RESPONSE_FINISH_REASON = "llm.response.finish_reason"
+    LLM_RESPONSE_STOP_REASON = "llm.response.stop_reason"
+    LLM_CONTENT_COMPLETION_CHUNK = "llm.content.completion.chunk"
+    LLM_REQUEST_REASONING_EFFORT = "llm.request.reasoning_effort"
+    LLM_USAGE_REASONING_TOKENS = "llm.usage.reasoning_tokens"
+
+    # Renamed LLM_* -> GEN_AI_* in v0.5.0 (name changed, value UNCHANGED)
+    # TODO: migrate each to its SpanAttributes.GEN_AI_* counterpart
+    LLM_REQUEST_STRUCTURED_OUTPUT_SCHEMA = "gen_ai.request.structured_output_schema"
+    LLM_REQUEST_REASONING_SUMMARY = "gen_ai.request.reasoning_summary"
+    LLM_RESPONSE_REASONING_EFFORT = "gen_ai.response.reasoning_effort"
+
+    # OpenAI (renamed LLM_OPENAI_* -> GEN_AI_OPENAI_* in v0.5.0, value unchanged)
+    # TODO: migrate each to its SpanAttributes.GEN_AI_OPENAI_* counterpart
+    LLM_OPENAI_API_BASE = "gen_ai.openai.api_base"
+    LLM_OPENAI_API_VERSION = "gen_ai.openai.api_version"
+    LLM_OPENAI_API_TYPE = "gen_ai.openai.api_type"
+
+    # Watsonx (renamed LLM_* -> GEN_AI_WATSONX_* in v0.5.0, value unchanged)
+    # TODO: migrate each to its SpanAttributes.GEN_AI_WATSONX_* counterpart
     LLM_DECODING_METHOD = "llm.watsonx.decoding_method"
     LLM_RANDOM_SEED = "llm.watsonx.random_seed"
     LLM_MAX_NEW_TOKENS = "llm.watsonx.max_new_tokens"
     LLM_MIN_NEW_TOKENS = "llm.watsonx.min_new_tokens"
     LLM_REPETITION_PENALTY = "llm.watsonx.repetition_penalty"
+
+    # Cache attributes — VALUE changed in v0.5.0 (underscore -> dot separator).
+    # LLM_* aliases: for packages using the old LLM_* constant name.
+    # GEN_AI_*_DEPRECATED: for packages already using GEN_AI_* name but expecting old value.
+    # TODO: migrate to SpanAttributes.GEN_AI_USAGE_CACHE_*_INPUT_TOKENS
+    LLM_USAGE_CACHE_CREATION_INPUT_TOKENS = "gen_ai.usage.cache_creation_input_tokens"
+    LLM_USAGE_CACHE_READ_INPUT_TOKENS = "gen_ai.usage.cache_read_input_tokens"
 
     # Chroma db
     CHROMADB_ADD_IDS_COUNT = "db.chroma.add.ids_count"
@@ -246,6 +311,24 @@ class SpanAttributes:
     MCP_SESSION_INIT_OPTIONS = "mcp.session.init_options"
     MCP_RESPONSE_VALUE = "mcp.response.value"
 
+    # GenAI Task Attributes (custom - not yet in official OTel semconv)
+    GEN_AI_TASK_ID = "gen_ai.task.id"
+    GEN_AI_TASK_NAME = "gen_ai.task.name"
+    GEN_AI_TASK_PARENT_ID = "gen_ai.task.parent.id"
+    GEN_AI_TASK_INPUT = "gen_ai.task.input"
+    GEN_AI_TASK_OUTPUT = "gen_ai.task.output"
+    GEN_AI_TASK_STATUS = "gen_ai.task.status"
+    GEN_AI_TASK_KIND = "gen_ai.task.kind"
+
+    # GenAI Workflow Attributes (custom - not yet in official OTel semconv)
+    GEN_AI_WORKFLOW_NODES = "gen_ai.workflow.nodes"
+    GEN_AI_WORKFLOW_EDGES = "gen_ai.workflow.edges"
+
+    # LangGraph-specific Attributes (vendor namespace)
+    LANGGRAPH_COMMAND_SOURCE_NODE = "langgraph.command.source_node"
+    LANGGRAPH_COMMAND_GOTO_NODE = "langgraph.command.goto_node"
+    LANGGRAPH_COMMAND_GOTO_NODES = "langgraph.command.goto_nodes"
+
 
 class Events(Enum):
     DB_QUERY_EMBEDDINGS = "db.query.embeddings"
@@ -290,3 +373,26 @@ class TraceloopSpanKindValues(Enum):
     AGENT = "agent"
     TOOL = "tool"
     UNKNOWN = "unknown"
+
+
+class GenAICustomOperationName(Enum):
+    """
+    Custom operation names extending the official OpenTelemetry GenAI semantic conventions.
+
+    For standard operations (create_agent, invoke_agent, execute_tool, chat, embeddings),
+    use the official GenAiOperationNameValues from:
+    opentelemetry.semconv._incubating.attributes.gen_ai_attributes
+
+    These are agent workflow extensions not yet in the official spec.
+    """
+
+    EXECUTE_TASK = "execute_task"
+    LLM_REQUEST = "llm_request"
+    VECTOR_DB_RETRIEVE = "vector_db_retrieve"
+
+
+class GenAITaskStatus(Enum):
+    """Task execution status values for gen_ai.task.status attribute."""
+
+    SUCCESS = "success"
+    FAILURE = "failure"
