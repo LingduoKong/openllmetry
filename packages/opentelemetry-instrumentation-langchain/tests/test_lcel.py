@@ -42,8 +42,8 @@ def test_simple_lcel(instrument_legacy, span_exporter, log_exporter):
 
     assert set(
         [
-            "ChatPromptTemplate.task",
-            "JsonOutputFunctionsParser.task",
+            "execute_task ChatPromptTemplate",
+            "execute_task JsonOutputFunctionsParser",
             "ChatOpenAI.chat",
             "ThisIsATestChain.workflow",
         ]
@@ -53,13 +53,13 @@ def test_simple_lcel(instrument_legacy, span_exporter, log_exporter):
         span for span in spans if span.name == "ThisIsATestChain.workflow"
     )
     prompt_task_span = next(
-        span for span in spans if span.name == "ChatPromptTemplate.task"
+        span for span in spans if span.name == "execute_task ChatPromptTemplate"
     )
     chat_openai_task_span = next(
         span for span in spans if span.name == "ChatOpenAI.chat"
     )
     output_parser_task_span = next(
-        span for span in spans if span.name == "JsonOutputFunctionsParser.task"
+        span for span in spans if span.name == "execute_task JsonOutputFunctionsParser"
     )
 
     assert prompt_task_span.parent.span_id == workflow_span.context.span_id
@@ -160,8 +160,8 @@ def test_simple_lcel_with_events_with_content(
 
     assert set(
         [
-            "ChatPromptTemplate.task",
-            "JsonOutputFunctionsParser.task",
+            "execute_task ChatPromptTemplate",
+            "execute_task JsonOutputFunctionsParser",
             "ChatOpenAI.chat",
             "ThisIsATestChain.workflow",
         ]
@@ -171,13 +171,13 @@ def test_simple_lcel_with_events_with_content(
         span for span in spans if span.name == "ThisIsATestChain.workflow"
     )
     prompt_task_span = next(
-        span for span in spans if span.name == "ChatPromptTemplate.task"
+        span for span in spans if span.name == "execute_task ChatPromptTemplate"
     )
     chat_openai_task_span = next(
         span for span in spans if span.name == "ChatOpenAI.chat"
     )
     output_parser_task_span = next(
-        span for span in spans if span.name == "JsonOutputFunctionsParser.task"
+        span for span in spans if span.name == "execute_task JsonOutputFunctionsParser"
     )
 
     assert prompt_task_span.parent.span_id == workflow_span.context.span_id
@@ -200,7 +200,7 @@ def test_simple_lcel_with_events_with_content(
     # Validate AI choice Event
     _choice_event = {
         "index": 0,
-        "finish_reason": "function_call",
+        "finish_reason": "tool_call",
         "message": {"content": ""},
         "tool_calls": [
             {
@@ -244,8 +244,8 @@ def test_simple_lcel_with_events_with_no_content(
 
     assert set(
         [
-            "ChatPromptTemplate.task",
-            "JsonOutputFunctionsParser.task",
+            "execute_task ChatPromptTemplate",
+            "execute_task JsonOutputFunctionsParser",
             "ChatOpenAI.chat",
             "ThisIsATestChain.workflow",
         ]
@@ -255,13 +255,13 @@ def test_simple_lcel_with_events_with_no_content(
         span for span in spans if span.name == "ThisIsATestChain.workflow"
     )
     prompt_task_span = next(
-        span for span in spans if span.name == "ChatPromptTemplate.task"
+        span for span in spans if span.name == "execute_task ChatPromptTemplate"
     )
     chat_openai_task_span = next(
         span for span in spans if span.name == "ChatOpenAI.chat"
     )
     output_parser_task_span = next(
-        span for span in spans if span.name == "JsonOutputFunctionsParser.task"
+        span for span in spans if span.name == "execute_task JsonOutputFunctionsParser"
     )
 
     assert prompt_task_span.parent.span_id == workflow_span.context.span_id
@@ -280,7 +280,7 @@ def test_simple_lcel_with_events_with_no_content(
     # Validate AI choice Event
     _choice_event = {
         "index": 0,
-        "finish_reason": "function_call",
+        "finish_reason": "tool_call",
         "message": {},
         "tool_calls": [{"function": {"name": "Joke"}, "id": "", "type": "function"}],
     }
@@ -304,9 +304,9 @@ async def test_async_lcel(instrument_legacy, span_exporter, log_exporter):
     spans = span_exporter.get_finished_spans()
 
     assert {
-        "PromptTemplate.task",
+        "execute_task PromptTemplate",
         "ChatOpenAI.chat",
-        "StrOutputParser.task",
+        "execute_task StrOutputParser",
         "RunnableSequence.workflow",
     } == set([span.name for span in spans])
 
@@ -317,7 +317,7 @@ async def test_async_lcel(instrument_legacy, span_exporter, log_exporter):
         span for span in spans if span.name == "ChatOpenAI.chat"
     )
     output_parser_task_span = next(
-        span for span in spans if span.name == "StrOutputParser.task"
+        span for span in spans if span.name == "execute_task StrOutputParser"
     )
 
     assert chat_openai_task_span.parent.span_id == workflow_span.context.span_id
@@ -362,9 +362,9 @@ async def test_async_lcel_with_events_with_content(
     spans = span_exporter.get_finished_spans()
 
     assert {
-        "PromptTemplate.task",
+        "execute_task PromptTemplate",
         "ChatOpenAI.chat",
-        "StrOutputParser.task",
+        "execute_task StrOutputParser",
         "RunnableSequence.workflow",
     } == set([span.name for span in spans])
 
@@ -375,7 +375,7 @@ async def test_async_lcel_with_events_with_content(
         span for span in spans if span.name == "ChatOpenAI.chat"
     )
     output_parser_task_span = next(
-        span for span in spans if span.name == "StrOutputParser.task"
+        span for span in spans if span.name == "execute_task StrOutputParser"
     )
 
     assert chat_openai_task_span.parent.span_id == workflow_span.context.span_id
@@ -421,9 +421,9 @@ async def test_async_lcel_with_events_with_no_content(
     spans = span_exporter.get_finished_spans()
 
     assert {
-        "PromptTemplate.task",
+        "execute_task PromptTemplate",
         "ChatOpenAI.chat",
-        "StrOutputParser.task",
+        "execute_task StrOutputParser",
         "RunnableSequence.workflow",
     } == set([span.name for span in spans])
 
@@ -434,7 +434,7 @@ async def test_async_lcel_with_events_with_no_content(
         span for span in spans if span.name == "ChatOpenAI.chat"
     )
     output_parser_task_span = next(
-        span for span in spans if span.name == "StrOutputParser.task"
+        span for span in spans if span.name == "execute_task StrOutputParser"
     )
 
     assert chat_openai_task_span.parent.span_id == workflow_span.context.span_id
@@ -472,9 +472,9 @@ def test_invoke(instrument_legacy, span_exporter, log_exporter):
     spans = span_exporter.get_finished_spans()
 
     assert [
-        "PromptTemplate.task",
+        "execute_task PromptTemplate",
         "ChatOpenAI.chat",
-        "StrOutputParser.task",
+        "execute_task StrOutputParser",
         "RunnableSequence.workflow",
     ] == [span.name for span in spans]
 
@@ -502,9 +502,9 @@ def test_invoke_with_events_with_content(
     spans = span_exporter.get_finished_spans()
 
     assert [
-        "PromptTemplate.task",
+        "execute_task PromptTemplate",
         "ChatOpenAI.chat",
-        "StrOutputParser.task",
+        "execute_task StrOutputParser",
         "RunnableSequence.workflow",
     ] == [span.name for span in spans]
 
@@ -546,9 +546,9 @@ def test_invoke_with_events_with_no_content(
     spans = span_exporter.get_finished_spans()
 
     assert [
-        "PromptTemplate.task",
+        "execute_task PromptTemplate",
         "ChatOpenAI.chat",
-        "StrOutputParser.task",
+        "execute_task StrOutputParser",
         "RunnableSequence.workflow",
     ] == [span.name for span in spans]
 
@@ -588,9 +588,9 @@ def test_stream(instrument_legacy, span_exporter, log_exporter):
     spans = span_exporter.get_finished_spans()
 
     assert [
-        "PromptTemplate.task",
+        "execute_task PromptTemplate",
         "ChatOpenAI.chat",
-        "StrOutputParser.task",
+        "execute_task StrOutputParser",
         "RunnableSequence.workflow",
     ] == [span.name for span in spans]
 
@@ -621,9 +621,9 @@ def test_stream_with_events_with_content(
     spans = span_exporter.get_finished_spans()
 
     assert [
-        "PromptTemplate.task",
+        "execute_task PromptTemplate",
         "ChatOpenAI.chat",
-        "StrOutputParser.task",
+        "execute_task StrOutputParser",
         "RunnableSequence.workflow",
     ] == [span.name for span in spans]
 
@@ -669,9 +669,9 @@ def test_stream_with_events_with_no_content(
     spans = span_exporter.get_finished_spans()
 
     assert [
-        "PromptTemplate.task",
+        "execute_task PromptTemplate",
         "ChatOpenAI.chat",
-        "StrOutputParser.task",
+        "execute_task StrOutputParser",
         "RunnableSequence.workflow",
     ] == [span.name for span in spans]
 
@@ -708,9 +708,9 @@ async def test_async_invoke(instrument_legacy, span_exporter, log_exporter):
     spans = span_exporter.get_finished_spans()
 
     assert [
-        "PromptTemplate.task",
+        "execute_task PromptTemplate",
         "ChatOpenAI.chat",
-        "StrOutputParser.task",
+        "execute_task StrOutputParser",
         "RunnableSequence.workflow",
     ] == [span.name for span in spans]
 
@@ -739,9 +739,9 @@ async def test_async_invoke_with_events_with_content(
     spans = span_exporter.get_finished_spans()
 
     assert [
-        "PromptTemplate.task",
+        "execute_task PromptTemplate",
         "ChatOpenAI.chat",
-        "StrOutputParser.task",
+        "execute_task StrOutputParser",
         "RunnableSequence.workflow",
     ] == [span.name for span in spans]
 
@@ -784,9 +784,9 @@ async def test_async_invoke_with_events_with_no_content(
     spans = span_exporter.get_finished_spans()
 
     assert [
-        "PromptTemplate.task",
+        "execute_task PromptTemplate",
         "ChatOpenAI.chat",
-        "StrOutputParser.task",
+        "execute_task StrOutputParser",
         "RunnableSequence.workflow",
     ] == [span.name for span in spans]
 
@@ -850,8 +850,8 @@ def test_lcel_with_datetime(instrument_legacy, span_exporter, log_exporter):
 
     assert set(
         [
-            "ChatPromptTemplate.task",
-            "JsonOutputFunctionsParser.task",
+            "execute_task ChatPromptTemplate",
+            "execute_task JsonOutputFunctionsParser",
             "ChatOpenAI.chat",
             "DateTimeTestChain.workflow",
         ]
@@ -899,8 +899,8 @@ def test_lcel_with_datetime_with_events_with_content(
 
     assert set(
         [
-            "ChatPromptTemplate.task",
-            "JsonOutputFunctionsParser.task",
+            "execute_task ChatPromptTemplate",
+            "execute_task JsonOutputFunctionsParser",
             "ChatOpenAI.chat",
             "DateTimeTestChain.workflow",
         ]
@@ -922,7 +922,7 @@ def test_lcel_with_datetime_with_events_with_content(
     # Validate AI choice Event
     _choice_event = {
         "index": 0,
-        "finish_reason": "function_call",
+        "finish_reason": "tool_call",
         "message": {"content": ""},
         "tool_calls": [
             {
@@ -975,8 +975,8 @@ def test_lcel_with_datetime_with_events_with_no_content(
 
     assert set(
         [
-            "ChatPromptTemplate.task",
-            "JsonOutputFunctionsParser.task",
+            "execute_task ChatPromptTemplate",
+            "execute_task JsonOutputFunctionsParser",
             "ChatOpenAI.chat",
             "DateTimeTestChain.workflow",
         ]
@@ -994,7 +994,7 @@ def test_lcel_with_datetime_with_events_with_no_content(
     # Validate AI choice Event
     _choice_event = {
         "index": 0,
-        "finish_reason": "function_call",
+        "finish_reason": "tool_call",
         "message": {},
         "tool_calls": [{"function": {"name": "Joke"}, "id": "", "type": "function"}],
     }
@@ -1003,7 +1003,7 @@ def test_lcel_with_datetime_with_events_with_no_content(
 
 def assert_message_in_logs(log: ReadableLogRecord, event_name: str, expected_content: dict):
     assert log.log_record.event_name == event_name
-    assert log.log_record.attributes.get(GenAIAttributes.GEN_AI_SYSTEM) == "langchain"
+    assert log.log_record.attributes.get(GenAIAttributes.GEN_AI_PROVIDER_NAME) == "langchain"
 
     if not expected_content:
         assert not log.log_record.body

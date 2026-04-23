@@ -1,3 +1,164 @@
+## v0.60.0 (2026-04-19)
+
+### Feat
+
+- **llamaindex**: Instrumentation adjustment for Otel GenAI semconv support  (#3979)
+
+### Fix
+
+- **groq**: align instrumentation with OTel GenAI semconv v1.40.0 (#4010)
+
+## v0.59.2 (2026-04-16)
+
+### Fix
+
+- **traceloop-sdk**: avoid calling async json methods in JSONEncoder (#3968)
+
+## v0.59.1 (2026-04-15)
+
+### Fix
+
+- **langchain**: detach existing SpanHolder token before overwrite in _create_llm_span (#3958)
+
+## v0.59.0 (2026-04-13)
+
+### Feat
+
+- **traceloop-sdk**: Add guardrails (#3649)
+
+## v0.58.1 (2026-04-12)
+
+### Fix
+
+- **evaluators**: update route api (#3977)
+
+## v0.58.0 (2026-04-09)
+
+### Feat
+
+- **gemini**: migrate google-generativeai to latest OTel GenAI semantic conventions (#3840)
+
+## v0.57.0 (2026-03-30)
+
+### Feat
+
+- **bedrock**: Instrumentation adjustment for Otel GenAI semconv support  (#3845)
+
+## v0.56.1 (2026-03-30)
+
+### Fix
+
+- **SDK + Agno**: set gen_ai.tool.name on @tool() decorator and Agno tool spans (#3904)
+
+## v0.56.0 (2026-03-30)
+
+### Feat
+
+- **crewai**: trigger version bump for GenAI semconv compliance (#3903)
+
+## v0.55.0 (2026-03-29)
+
+### Feat
+
+- **open-ai**: instrumentation to support OTel GenAI Semantic Conventions 0.5.0 (#3844)
+- **langchain**: new semnconv langchain (#3900)
+
+## v0.54.0 (2026-03-29)
+
+### Feat
+
+- **anthropic**: conform instrumentation to OTel GenAI semantic conventions (#3835)
+
+## v0.53.4 (2026-03-29)
+
+### Fix
+
+- **release**: google_generativeai path in .cz.toml & trigger version bump in all instrumentations (#3896)
+- **llamaindex**: handle None content in StructuredLLM responses (#3513) (#3665)
+- **semconv**: migrating span attributes to OTel gen_ai convention (#3809)
+
+## v0.53.3 (2026-03-19)
+
+### Fix
+
+- **langchain**: release and use semconv 0.4.16 version (#3829)
+
+## v0.53.2 (2026-03-18)
+
+### Fix
+
+- use GITHUB_TOKEN for release creation to resolve 403 error (#3821)
+
+## v0.53.1 (2026-03-17)
+
+### Fix
+
+- **traceloop-sdk**: Add dataset override functionality (#3813)
+
+## v0.53.0 (2026-03-04)
+
+### Feat
+
+- **langchain**: add OpenTelemetry GenAI semantic conventions (#3673)
+
+### Fix
+
+- **semconv**: revert deleted semconv attributes (#3750)
+- **pinecone**: instrument pinecone package instead of deprecated pinecone-client (#3733)
+- **langchain**: support non-ascii characters to support i18n (#3734)
+
+## v0.52.6 (2026-02-26)
+
+### Fix
+
+- **dataset**: Add versions to dataset metadata  (#3732)
+- **qdrant**: support all versions of qdrant package (#3500)
+
+## v0.52.5 (2026-02-23)
+
+### Fix
+
+- **traceloop-sdk**: Add evaluator config to the evaluator validator (#3706)
+- **anthropic**: restore accidentally lost cache tokens attributes (#3648)
+
+## v0.52.4 (2026-02-19)
+
+### Fix
+
+- **openai-agents**: fix realtime session event handling for prompts, completions, and usage (#3688)
+- preserve return values for RealtimeSession context manager methods (#3681)
+- **openai-agents**: add functools.wraps to dont_throw decorator (#3687)
+
+## v0.52.3 (2026-02-10)
+
+### Fix
+
+- **openai-agents**: add clear flag to support two instrumentation modes (#3489)
+
+## v0.52.2 (2026-02-08)
+
+### Fix
+
+- **traceloop-sdk**: Add conversation decorator (#3659)
+- **traceloop-sdk**: Add endpoint_is_traceloop attribute (#3650)
+
+## v0.52.1 (2026-02-02)
+
+### Fix
+
+- **voyageai**: add to commitizen to bump on release (#3660)
+
+## v0.52.0 (2026-02-02)
+
+### Feat
+
+- **voyage-ai**: add voyage-ai instrumentation (#3653)
+
+### Fix
+
+- **openai-agents**: apply content tracing flag to content (#3487)
+- **traceloop-sdk**: Align evals output schema (#3643)
+
 ## v0.51.1 (2026-01-26)
 
 ### Fix

@@ -54,7 +54,6 @@ def test_agent_with_legacy_attributes(exporter, test_agent):
     )
 
 
-@pytest.mark.skip(reason="Requires test isolation fixes for TracerProvider - to be addressed in follow-up")
 @pytest.mark.vcr
 def test_agent_with_events_with_content(
     instrument_with_content, span_exporter, log_exporter, test_agent
@@ -109,7 +108,6 @@ def test_agent_with_events_with_content(
     assert choice_log.log_record.body is not None
 
 
-@pytest.mark.skip(reason="Requires test isolation fixes for TracerProvider - to be addressed in follow-up")
 @pytest.mark.vcr
 def test_agent_with_events_with_no_content(
     instrument_with_no_content, span_exporter, log_exporter, test_agent
@@ -161,7 +159,6 @@ def test_agent_with_events_with_no_content(
     assert choice_log is not None, "Expected gen_ai.choice event"
 
 
-@pytest.mark.skip(reason="Requires test isolation fixes for TracerProvider - to be addressed in follow-up")
 @pytest.mark.vcr
 def test_agent_with_function_tool_events(
     instrument_with_content, span_exporter, log_exporter, function_tool_agent

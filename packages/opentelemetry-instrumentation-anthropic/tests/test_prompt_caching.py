@@ -1,12 +1,51 @@
 from pathlib import Path
+import json
 
 import pytest
 from opentelemetry.sdk._logs import ReadableLogRecord
+from opentelemetry.sdk.trace import ReadableSpan
 from opentelemetry.semconv._incubating.attributes import (
     gen_ai_attributes as GenAIAttributes,
 )
 
 from .utils import verify_metrics
+
+
+def _verify_caching_attributes(
+    cache_creation_span: ReadableSpan,
+    cache_read_span: ReadableSpan,
+    input_tokens: int,
+    cache_creation_span_output_tokens: int,
+    cache_read_span_output_tokens: int,
+    cached_tokens: int,
+):
+    assert (
+        cache_creation_span.attributes["gen_ai.usage.cache_creation.input_tokens"]
+        == cache_read_span.attributes["gen_ai.usage.cache_read.input_tokens"]
+    )
+
+    # first check that cache_creation_span only wrote to cache, but not read from it,
+    assert cache_creation_span.attributes["gen_ai.usage.cache_read.input_tokens"] == 0
+    assert (
+        cache_creation_span.attributes["gen_ai.usage.cache_creation.input_tokens"] != 0
+    )
+
+    # then check for exact figures for the fixture/cassette
+    assert (
+        cache_creation_span.attributes["gen_ai.usage.cache_creation.input_tokens"]
+        == cached_tokens
+    )
+    assert cache_creation_span.attributes["gen_ai.usage.input_tokens"] == input_tokens
+    assert cache_creation_span.attributes["gen_ai.usage.output_tokens"] == cache_creation_span_output_tokens
+
+    # first check that cache_read_span only read from cache, but not wrote to it,
+    assert cache_read_span.attributes["gen_ai.usage.cache_read.input_tokens"] != 0
+    assert cache_read_span.attributes["gen_ai.usage.cache_creation.input_tokens"] == 0
+
+    # then check for exact figures for the fixture/cassette
+    assert cache_read_span.attributes["gen_ai.usage.cache_read.input_tokens"] == cached_tokens
+    assert cache_read_span.attributes["gen_ai.usage.input_tokens"] == input_tokens
+    assert cache_read_span.attributes["gen_ai.usage.output_tokens"] == cache_read_span_output_tokens
 
 
 @pytest.mark.vcr
@@ -60,15 +99,21 @@ def test_anthropic_prompt_caching_legacy(
     cache_creation_span = spans[0]
     cache_read_span = spans[1]
 
-    assert cache_creation_span.attributes["gen_ai.prompt.0.role"] == "system"
-    assert system_message == cache_creation_span.attributes["gen_ai.prompt.0.content"]
-    assert cache_read_span.attributes["gen_ai.prompt.0.role"] == "system"
-    assert system_message == cache_read_span.attributes["gen_ai.prompt.0.content"]
+    expected_system = json.dumps([{"type": "text", "content": system_message}])
+    assert cache_creation_span.attributes[GenAIAttributes.GEN_AI_SYSTEM_INSTRUCTIONS] == expected_system
+    assert cache_read_span.attributes[GenAIAttributes.GEN_AI_SYSTEM_INSTRUCTIONS] == expected_system
 
-    assert cache_creation_span.attributes["gen_ai.prompt.1.role"] == "user"
-    assert text == cache_creation_span.attributes["gen_ai.prompt.1.content"]
-    assert cache_read_span.attributes["gen_ai.prompt.1.role"] == "user"
-    assert text == cache_read_span.attributes["gen_ai.prompt.1.content"]
+    cc_input = json.loads(cache_creation_span.attributes[GenAIAttributes.GEN_AI_INPUT_MESSAGES])
+    assert cc_input[0]["role"] == "user"
+    assert text == cc_input[0]["parts"][0]["content"]
+    cr_input = json.loads(cache_read_span.attributes[GenAIAttributes.GEN_AI_INPUT_MESSAGES])
+    assert cr_input[0]["role"] == "user"
+    assert text == cr_input[0]["parts"][0]["content"]
+
+    assert (
+        cache_creation_span.attributes["gen_ai.usage.cache_creation.input_tokens"]
+        == cache_read_span.attributes["gen_ai.usage.cache_read.input_tokens"]
+    )
 
     assert (
         cache_creation_span.attributes.get("gen_ai.response.id")
@@ -79,14 +124,10 @@ def test_anthropic_prompt_caching_legacy(
         == "msg_01YGB3PuEANUSkLuzemhtNVF"
     )
 
-    assert cache_creation_span.attributes["gen_ai.completion.0.role"] == "assistant"
-    assert cache_read_span.attributes["gen_ai.completion.0.role"] == "assistant"
+    assert json.loads(cache_creation_span.attributes[GenAIAttributes.GEN_AI_OUTPUT_MESSAGES])[-1]["role"] == "assistant"
+    assert json.loads(cache_read_span.attributes[GenAIAttributes.GEN_AI_OUTPUT_MESSAGES])[-1]["role"] == "assistant"
 
-    # assert cache_creation_span.attributes["gen_ai.usage.input_tokens"] == 1167
-    assert cache_creation_span.attributes["gen_ai.usage.output_tokens"] == 187
-
-    assert cache_read_span.attributes["gen_ai.usage.input_tokens"] == 1167
-    assert cache_read_span.attributes["gen_ai.usage.output_tokens"] == 202
+    _verify_caching_attributes(cache_creation_span, cache_read_span, 1167, 187, 202, 1163)
 
     # verify metrics
     metrics_data = reader.get_metrics_data()
@@ -150,11 +191,7 @@ def test_anthropic_prompt_caching_with_events_with_content(
     cache_creation_span = spans[0]
     cache_read_span = spans[1]
 
-    assert cache_creation_span.attributes["gen_ai.usage.input_tokens"] == 1167
-    assert cache_creation_span.attributes["gen_ai.usage.output_tokens"] == 187
-
-    assert cache_read_span.attributes["gen_ai.usage.input_tokens"] == 1167
-    assert cache_read_span.attributes["gen_ai.usage.output_tokens"] == 202
+    _verify_caching_attributes(cache_creation_span, cache_read_span, 1167, 187, 202, 1163)
 
     # verify metrics
     metrics_data = reader.get_metrics_data()
@@ -198,7 +235,7 @@ def test_anthropic_prompt_caching_with_events_with_content(
     # Validate the first the ai response
     choice_event = {
         "index": 0,
-        "finish_reason": "end_turn",
+        "finish_reason": "stop",
         "message": {
             "content": "Here are concise summaries of the three articles:\n\n1. OpenLLMetry: New open-source library "
             "extends OpenTelemetry with LLM functionality, enabling developers to monitor AI model performance in "
@@ -248,7 +285,7 @@ def test_anthropic_prompt_caching_with_events_with_content(
     # Validate the second the ai response
     choice_event = {
         "index": 0,
-        "finish_reason": "end_turn",
+        "finish_reason": "stop",
         "message": {
             "content": "Here are concise summaries of the three articles:\n\n1. OpenLLMetry: New open-source library "
             "extending OpenTelemetry with LLM functionality. Key features include LLM-specific metrics/traces, "
@@ -316,11 +353,7 @@ def test_anthropic_prompt_caching_with_events_with_no_content(
     cache_creation_span = spans[0]
     cache_read_span = spans[1]
 
-    assert cache_creation_span.attributes["gen_ai.usage.input_tokens"] == 1167
-    assert cache_creation_span.attributes["gen_ai.usage.output_tokens"] == 187
-
-    assert cache_read_span.attributes["gen_ai.usage.input_tokens"] == 1167
-    assert cache_read_span.attributes["gen_ai.usage.output_tokens"] == 202
+    _verify_caching_attributes(cache_creation_span, cache_read_span, 1167, 187, 202, 1163)
 
     # verify metrics
     metrics_data = reader.get_metrics_data()
@@ -345,7 +378,7 @@ def test_anthropic_prompt_caching_with_events_with_no_content(
         # Validate the the ai response
         choice_event = {
             "index": 0,
-            "finish_reason": "end_turn",
+            "finish_reason": "stop",
             "message": {},
         }
         assert_message_in_logs(logs[i], "gen_ai.choice", choice_event)
@@ -404,15 +437,16 @@ async def test_anthropic_prompt_caching_async_legacy(
     cache_creation_span = spans[0]
     cache_read_span = spans[1]
 
-    assert cache_creation_span.attributes["gen_ai.prompt.0.role"] == "system"
-    assert system_message == cache_creation_span.attributes["gen_ai.prompt.0.content"]
-    assert cache_read_span.attributes["gen_ai.prompt.0.role"] == "system"
-    assert system_message == cache_read_span.attributes["gen_ai.prompt.0.content"]
+    expected_system = json.dumps([{"type": "text", "content": system_message}])
+    assert cache_creation_span.attributes[GenAIAttributes.GEN_AI_SYSTEM_INSTRUCTIONS] == expected_system
+    assert cache_read_span.attributes[GenAIAttributes.GEN_AI_SYSTEM_INSTRUCTIONS] == expected_system
 
-    assert cache_creation_span.attributes["gen_ai.prompt.1.role"] == "user"
-    assert text == cache_creation_span.attributes["gen_ai.prompt.1.content"]
-    assert cache_read_span.attributes["gen_ai.prompt.1.role"] == "user"
-    assert text == cache_read_span.attributes["gen_ai.prompt.1.content"]
+    cc_input = json.loads(cache_creation_span.attributes[GenAIAttributes.GEN_AI_INPUT_MESSAGES])
+    assert cc_input[0]["role"] == "user"
+    assert text == cc_input[0]["parts"][0]["content"]
+    cr_input = json.loads(cache_read_span.attributes[GenAIAttributes.GEN_AI_INPUT_MESSAGES])
+    assert cr_input[0]["role"] == "user"
+    assert text == cr_input[0]["parts"][0]["content"]
 
     assert (
         cache_creation_span.attributes.get("gen_ai.response.id")
@@ -423,14 +457,10 @@ async def test_anthropic_prompt_caching_async_legacy(
         == "msg_01Q8hYZvCMAQKC4n8X3zFnrX"
     )
 
-    assert cache_creation_span.attributes["gen_ai.completion.0.role"] == "assistant"
-    assert cache_read_span.attributes["gen_ai.completion.0.role"] == "assistant"
+    assert json.loads(cache_creation_span.attributes[GenAIAttributes.GEN_AI_OUTPUT_MESSAGES])[-1]["role"] == "assistant"
+    assert json.loads(cache_read_span.attributes[GenAIAttributes.GEN_AI_OUTPUT_MESSAGES])[-1]["role"] == "assistant"
 
-    assert cache_creation_span.attributes["gen_ai.usage.input_tokens"] == 1169
-    assert cache_creation_span.attributes["gen_ai.usage.output_tokens"] == 207
-
-    assert cache_read_span.attributes["gen_ai.usage.input_tokens"] == 1169
-    assert cache_read_span.attributes["gen_ai.usage.output_tokens"] == 224
+    _verify_caching_attributes(cache_creation_span, cache_read_span, 1169, 207, 224, 1165)
 
     # verify metrics
     metrics_data = reader.get_metrics_data()
@@ -495,11 +525,7 @@ async def test_anthropic_prompt_caching_async_with_events_with_content(
     cache_creation_span = spans[0]
     cache_read_span = spans[1]
 
-    assert cache_creation_span.attributes["gen_ai.usage.input_tokens"] == 1169
-    assert cache_creation_span.attributes["gen_ai.usage.output_tokens"] == 207
-
-    assert cache_read_span.attributes["gen_ai.usage.input_tokens"] == 1169
-    assert cache_read_span.attributes["gen_ai.usage.output_tokens"] == 224
+    _verify_caching_attributes(cache_creation_span, cache_read_span, 1169, 207, 224, 1165)
 
     # verify metrics
     metrics_data = reader.get_metrics_data()
@@ -543,7 +569,7 @@ async def test_anthropic_prompt_caching_async_with_events_with_content(
     # Validate the first the ai response
     choice_event = {
         "index": 0,
-        "finish_reason": "end_turn",
+        "finish_reason": "stop",
         "message": {
             "content": "Here are concise summaries of the three articles:\n\n1. OpenLLMetry: New open-source library "
             "extending OpenTelemetry with LLM functionality. Developed by Traceloop, it provides LLM-specific metrics "
@@ -593,7 +619,7 @@ async def test_anthropic_prompt_caching_async_with_events_with_content(
     # Validate the second the ai response
     choice_event = {
         "index": 0,
-        "finish_reason": "end_turn",
+        "finish_reason": "stop",
         "message": {
             "content": "Here are concise summaries of the three articles:\n\n1. OpenLLMetry: New open-source library "
             "extending OpenTelemetry with LLM functionality. Key features include LLM-specific metrics/traces, "
@@ -667,11 +693,12 @@ async def test_anthropic_prompt_caching_async_with_events_with_no_content(
     cache_creation_span = spans[0]
     cache_read_span = spans[1]
 
-    assert cache_creation_span.attributes["gen_ai.usage.input_tokens"] == 1169
-    assert cache_creation_span.attributes["gen_ai.usage.output_tokens"] == 207
+    assert (
+        cache_creation_span.attributes["gen_ai.usage.cache_creation.input_tokens"]
+        == cache_read_span.attributes["gen_ai.usage.cache_read.input_tokens"]
+    )
 
-    assert cache_read_span.attributes["gen_ai.usage.input_tokens"] == 1169
-    assert cache_read_span.attributes["gen_ai.usage.output_tokens"] == 224
+    _verify_caching_attributes(cache_creation_span, cache_read_span, 1169, 207, 224, 1165)
 
     # verify metrics
     metrics_data = reader.get_metrics_data()
@@ -696,7 +723,7 @@ async def test_anthropic_prompt_caching_async_with_events_with_no_content(
         # Validate the the ai response
         choice_event = {
             "index": 0,
-            "finish_reason": "end_turn",
+            "finish_reason": "stop",
             "message": {},
         }
         assert_message_in_logs(logs[i], "gen_ai.choice", choice_event)
@@ -758,15 +785,16 @@ def test_anthropic_prompt_caching_stream_legacy(
     cache_creation_span = spans[0]
     cache_read_span = spans[1]
 
-    assert cache_creation_span.attributes["gen_ai.prompt.0.role"] == "system"
-    assert system_message == cache_creation_span.attributes["gen_ai.prompt.0.content"]
-    assert cache_read_span.attributes["gen_ai.prompt.0.role"] == "system"
-    assert system_message == cache_read_span.attributes["gen_ai.prompt.0.content"]
+    expected_system = json.dumps([{"type": "text", "content": system_message}])
+    assert cache_creation_span.attributes[GenAIAttributes.GEN_AI_SYSTEM_INSTRUCTIONS] == expected_system
+    assert cache_read_span.attributes[GenAIAttributes.GEN_AI_SYSTEM_INSTRUCTIONS] == expected_system
 
-    assert cache_creation_span.attributes["gen_ai.prompt.1.role"] == "user"
-    assert text == cache_creation_span.attributes["gen_ai.prompt.1.content"]
-    assert cache_read_span.attributes["gen_ai.prompt.1.role"] == "user"
-    assert text == cache_read_span.attributes["gen_ai.prompt.1.content"]
+    cc_input = json.loads(cache_creation_span.attributes[GenAIAttributes.GEN_AI_INPUT_MESSAGES])
+    assert cc_input[0]["role"] == "user"
+    assert text == cc_input[0]["parts"][0]["content"]
+    cr_input = json.loads(cache_read_span.attributes[GenAIAttributes.GEN_AI_INPUT_MESSAGES])
+    assert cr_input[0]["role"] == "user"
+    assert text == cr_input[0]["parts"][0]["content"]
 
     assert (
         cache_creation_span.attributes.get("gen_ai.response.id")
@@ -777,14 +805,10 @@ def test_anthropic_prompt_caching_stream_legacy(
         == "msg_01XQRA3bs4SB4yTBMwD3dbUi"
     )
 
-    assert cache_creation_span.attributes["gen_ai.completion.0.role"] == "assistant"
-    assert cache_read_span.attributes["gen_ai.completion.0.role"] == "assistant"
+    assert json.loads(cache_creation_span.attributes[GenAIAttributes.GEN_AI_OUTPUT_MESSAGES])[-1]["role"] == "assistant"
+    assert json.loads(cache_read_span.attributes[GenAIAttributes.GEN_AI_OUTPUT_MESSAGES])[-1]["role"] == "assistant"
 
-    assert cache_creation_span.attributes["gen_ai.usage.input_tokens"] == 1169
-    assert cache_creation_span.attributes["gen_ai.usage.output_tokens"] == 202
-
-    assert cache_read_span.attributes["gen_ai.usage.input_tokens"] == 1169
-    assert cache_read_span.attributes["gen_ai.usage.output_tokens"] == 222
+    _verify_caching_attributes(cache_creation_span, cache_read_span, 1169, 202, 222, 1165)
 
     # verify metrics
     metrics_data = reader.get_metrics_data()
@@ -852,11 +876,7 @@ def test_anthropic_prompt_caching_stream_with_events_with_content(
     cache_creation_span = spans[0]
     cache_read_span = spans[1]
 
-    assert cache_creation_span.attributes["gen_ai.usage.input_tokens"] == 1169
-    assert cache_creation_span.attributes["gen_ai.usage.output_tokens"] == 202
-
-    assert cache_read_span.attributes["gen_ai.usage.input_tokens"] == 1169
-    assert cache_read_span.attributes["gen_ai.usage.output_tokens"] == 222
+    _verify_caching_attributes(cache_creation_span, cache_read_span, 1169, 202, 222, 1165)
 
     # verify metrics
     metrics_data = reader.get_metrics_data()
@@ -900,7 +920,7 @@ def test_anthropic_prompt_caching_stream_with_events_with_content(
     # Validate the first the ai response
     choice_event = {
         "index": 0,
-        "finish_reason": "end_turn",
+        "finish_reason": "stop",
         "message": {
             "content": {
                 "type": "text",
@@ -953,7 +973,7 @@ def test_anthropic_prompt_caching_stream_with_events_with_content(
     # Validate the second the ai response
     choice_event = {
         "index": 0,
-        "finish_reason": "end_turn",
+        "finish_reason": "stop",
         "message": {
             "content": {
                 "type": "text",
@@ -1029,11 +1049,7 @@ def test_anthropic_prompt_caching_stream_with_events_with_no_content(
     cache_creation_span = spans[0]
     cache_read_span = spans[1]
 
-    assert cache_creation_span.attributes["gen_ai.usage.input_tokens"] == 1169
-    assert cache_creation_span.attributes["gen_ai.usage.output_tokens"] == 202
-
-    assert cache_read_span.attributes["gen_ai.usage.input_tokens"] == 1169
-    assert cache_read_span.attributes["gen_ai.usage.output_tokens"] == 222
+    _verify_caching_attributes(cache_creation_span, cache_read_span, 1169, 202, 222, 1165)
 
     # verify metrics
     metrics_data = reader.get_metrics_data()
@@ -1058,7 +1074,7 @@ def test_anthropic_prompt_caching_stream_with_events_with_no_content(
         # Validate the the ai response
         choice_event = {
             "index": 0,
-            "finish_reason": "end_turn",
+            "finish_reason": "stop",
             "message": {},
         }
         assert_message_in_logs(logs[i], "gen_ai.choice", choice_event)
@@ -1121,10 +1137,9 @@ async def test_anthropic_prompt_caching_async_stream_legacy(
     cache_creation_span = spans[0]
     cache_read_span = spans[1]
 
-    assert cache_creation_span.attributes["gen_ai.prompt.0.role"] == "system"
-    assert system_message == cache_creation_span.attributes["gen_ai.prompt.0.content"]
-    assert cache_read_span.attributes["gen_ai.prompt.0.role"] == "system"
-    assert system_message == cache_read_span.attributes["gen_ai.prompt.0.content"]
+    expected_system = json.dumps([{"type": "text", "content": system_message}])
+    assert cache_creation_span.attributes[GenAIAttributes.GEN_AI_SYSTEM_INSTRUCTIONS] == expected_system
+    assert cache_read_span.attributes[GenAIAttributes.GEN_AI_SYSTEM_INSTRUCTIONS] == expected_system
     assert (
         cache_creation_span.attributes.get("gen_ai.response.id")
         == "msg_01KQCu5jXyou55u6YFNk6uqu"
@@ -1134,19 +1149,17 @@ async def test_anthropic_prompt_caching_async_stream_legacy(
         == "msg_01GZo7EAMfEuzRqTKrFANNpA"
     )
 
-    assert cache_creation_span.attributes["gen_ai.completion.0.role"] == "assistant"
-    assert cache_read_span.attributes["gen_ai.completion.0.role"] == "assistant"
+    assert json.loads(cache_creation_span.attributes[GenAIAttributes.GEN_AI_OUTPUT_MESSAGES])[-1]["role"] == "assistant"
+    assert json.loads(cache_read_span.attributes[GenAIAttributes.GEN_AI_OUTPUT_MESSAGES])[-1]["role"] == "assistant"
 
-    assert cache_creation_span.attributes["gen_ai.prompt.1.role"] == "user"
-    assert text == cache_creation_span.attributes["gen_ai.prompt.1.content"]
-    assert cache_read_span.attributes["gen_ai.prompt.1.role"] == "user"
-    assert text == cache_read_span.attributes["gen_ai.prompt.1.content"]
+    cc_input = json.loads(cache_creation_span.attributes[GenAIAttributes.GEN_AI_INPUT_MESSAGES])
+    assert cc_input[0]["role"] == "user"
+    assert text == cc_input[0]["parts"][0]["content"]
+    cr_input = json.loads(cache_read_span.attributes[GenAIAttributes.GEN_AI_INPUT_MESSAGES])
+    assert cr_input[0]["role"] == "user"
+    assert text == cr_input[0]["parts"][0]["content"]
 
-    assert cache_creation_span.attributes["gen_ai.usage.input_tokens"] == 1171
-    assert cache_creation_span.attributes["gen_ai.usage.output_tokens"] == 290
-
-    assert cache_read_span.attributes["gen_ai.usage.input_tokens"] == 1171
-    assert cache_read_span.attributes["gen_ai.usage.output_tokens"] == 257
+    _verify_caching_attributes(cache_creation_span, cache_read_span, 1171, 290, 257, 1167)
 
     # verify metrics
     metrics_data = reader.get_metrics_data()
@@ -1215,11 +1228,7 @@ async def test_anthropic_prompt_caching_async_stream_with_events_with_content(
     cache_creation_span = spans[0]
     cache_read_span = spans[1]
 
-    assert cache_creation_span.attributes["gen_ai.usage.input_tokens"] == 1171
-    assert cache_creation_span.attributes["gen_ai.usage.output_tokens"] == 290
-
-    assert cache_read_span.attributes["gen_ai.usage.input_tokens"] == 1171
-    assert cache_read_span.attributes["gen_ai.usage.output_tokens"] == 257
+    _verify_caching_attributes(cache_creation_span, cache_read_span, 1171, 290, 257, 1167)
 
     # verify metrics
     metrics_data = reader.get_metrics_data()
@@ -1263,7 +1272,7 @@ async def test_anthropic_prompt_caching_async_stream_with_events_with_content(
     # Validate the first the ai response
     choice_event = {
         "index": 0,
-        "finish_reason": "end_turn",
+        "finish_reason": "stop",
         "message": {
             "content": {
                 "type": "text",
@@ -1319,7 +1328,7 @@ async def test_anthropic_prompt_caching_async_stream_with_events_with_content(
     # Validate the second the ai response
     choice_event = {
         "index": 0,
-        "finish_reason": "end_turn",
+        "finish_reason": "stop",
         "message": {
             "content": {
                 "type": "text",
@@ -1403,11 +1412,7 @@ async def test_anthropic_prompt_caching_async_stream_with_events_with_no_content
     cache_creation_span = spans[0]
     cache_read_span = spans[1]
 
-    assert cache_creation_span.attributes["gen_ai.usage.input_tokens"] == 1171
-    assert cache_creation_span.attributes["gen_ai.usage.output_tokens"] == 290
-
-    assert cache_read_span.attributes["gen_ai.usage.input_tokens"] == 1171
-    assert cache_read_span.attributes["gen_ai.usage.output_tokens"] == 257
+    _verify_caching_attributes(cache_creation_span, cache_read_span, 1171, 290, 257, 1167)
 
     # verify metrics
     metrics_data = reader.get_metrics_data()
@@ -1432,7 +1437,7 @@ async def test_anthropic_prompt_caching_async_stream_with_events_with_no_content
         # Validate the the ai response
         choice_event = {
             "index": 0,
-            "finish_reason": "end_turn",
+            "finish_reason": "stop",
             "message": {},
         }
         assert_message_in_logs(logs[i], "gen_ai.choice", choice_event)
@@ -1442,7 +1447,7 @@ async def test_anthropic_prompt_caching_async_stream_with_events_with_no_content
 def assert_message_in_logs(log: ReadableLogRecord, event_name: str, expected_content: dict):
     assert log.log_record.event_name == event_name
     assert (
-        log.log_record.attributes.get(GenAIAttributes.GEN_AI_SYSTEM)
+        log.log_record.attributes.get(GenAIAttributes.GEN_AI_PROVIDER_NAME)
         == GenAIAttributes.GenAiSystemValues.ANTHROPIC.value
     )
 

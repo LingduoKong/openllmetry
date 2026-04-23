@@ -47,8 +47,8 @@ def test_simple_workflow(exporter, openai_client):
         "pirate_joke_generator.workflow",
     ]
     open_ai_span = next(span for span in spans if span.name == "openai.chat")
-    assert open_ai_span.attributes[f"{GenAIAttributes.GEN_AI_PROMPT}.0.content"] == "Tell me a joke about OpenTelemetry"
-    assert open_ai_span.attributes.get(f"{GenAIAttributes.GEN_AI_COMPLETION}.0.content")
+    assert "Tell me a joke about OpenTelemetry" in open_ai_span.attributes[GenAIAttributes.GEN_AI_INPUT_MESSAGES]
+    assert open_ai_span.attributes.get(GenAIAttributes.GEN_AI_OUTPUT_MESSAGES)
     assert open_ai_span.attributes.get("traceloop.prompt.template") == "Tell me a {what} about {subject}"
     assert open_ai_span.attributes.get("traceloop.prompt.template_variables.what") == "joke"
     assert open_ai_span.attributes.get("traceloop.prompt.template_variables.subject") == "OpenTelemetry"
@@ -93,8 +93,8 @@ async def test_simple_aworkflow(exporter, async_openai_client):
         "pirate_joke_generator.workflow",
     ]
     open_ai_span = next(span for span in spans if span.name == "openai.chat")
-    assert open_ai_span.attributes[f"{GenAIAttributes.GEN_AI_PROMPT}.0.content"] == "Tell me a joke about OpenTelemetry"
-    assert open_ai_span.attributes.get(f"{GenAIAttributes.GEN_AI_COMPLETION}.0.content")
+    assert "Tell me a joke about OpenTelemetry" in open_ai_span.attributes[GenAIAttributes.GEN_AI_INPUT_MESSAGES]
+    assert open_ai_span.attributes.get(GenAIAttributes.GEN_AI_OUTPUT_MESSAGES)
     assert open_ai_span.attributes.get("traceloop.prompt.template") == "Tell me a {what} about {subject}"
     assert open_ai_span.attributes.get("traceloop.prompt.template_variables.what") == "joke"
     assert open_ai_span.attributes.get("traceloop.prompt.template_variables.subject") == "OpenTelemetry"
@@ -496,3 +496,55 @@ def test_dataclass_serialization_workflow(exporter):
     assert task_span.parent.span_id == workflow_span.context.span_id
     assert workflow_span.attributes[SpanAttributes.TRACELOOP_ENTITY_NAME] == "dataclass_workflow"
     assert task_span.attributes[SpanAttributes.TRACELOOP_ENTITY_NAME] == "dataclass_task"
+
+
+class FakeAsyncRequest:
+    async def json(self):
+        return {"ok": True}
+
+
+class FakeSyncRequest:
+    def json(self):
+        return {"ok": True}
+
+
+@pytest.mark.asyncio
+async def test_async_workflow_with_async_json_method_argument(exporter, recwarn):
+    @workflow(name="request_workflow")
+    async def request_workflow(request: FakeAsyncRequest):
+        return {"ok": True}
+
+    await request_workflow(FakeAsyncRequest())
+
+    assert not any(
+        w.category is RuntimeWarning and "was never awaited" in str(w.message)
+        for w in recwarn
+    )
+
+    spans = exporter.get_finished_spans()
+    assert [span.name for span in spans] == ["request_workflow.workflow"]
+
+    workflow_span = spans[0]
+    assert json.loads(workflow_span.attributes[SpanAttributes.TRACELOOP_ENTITY_INPUT]) == {
+        "args": ["FakeAsyncRequest"],
+        "kwargs": {},
+    }
+    assert json.loads(workflow_span.attributes[SpanAttributes.TRACELOOP_ENTITY_OUTPUT]) == {"ok": True}
+
+
+def test_workflow_with_sync_json_method_argument(exporter):
+    @workflow(name="request_workflow")
+    def request_workflow(request: FakeSyncRequest):
+        return {"ok": True}
+
+    request_workflow(FakeSyncRequest())
+
+    spans = exporter.get_finished_spans()
+    assert [span.name for span in spans] == ["request_workflow.workflow"]
+
+    workflow_span = spans[0]
+    assert json.loads(workflow_span.attributes[SpanAttributes.TRACELOOP_ENTITY_INPUT]) == {
+        "args": [{"ok": True}],
+        "kwargs": {},
+    }
+    assert json.loads(workflow_span.attributes[SpanAttributes.TRACELOOP_ENTITY_OUTPUT]) == {"ok": True}

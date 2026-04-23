@@ -38,21 +38,21 @@ def test_agents(instrument_legacy, span_exporter, log_exporter):
     spans = span_exporter.get_finished_spans()
 
     assert set([span.name for span in spans]) == {
-        "RunnableLambda.task",
-        "RunnableParallel<agent_scratchpad>.task",
-        "RunnableAssign<agent_scratchpad>.task",
-        "ChatPromptTemplate.task",
+        "execute_task RunnableLambda",
+        "execute_task RunnableParallel<agent_scratchpad>",
+        "execute_task RunnableAssign<agent_scratchpad>",
+        "execute_task ChatPromptTemplate",
         "ChatOpenAI.chat",
-        "ToolsAgentOutputParser.task",
-        "RunnableSequence.task",
-        "tavily_search_results_json.tool",
-        "RunnableLambda.task",
-        "RunnableParallel<agent_scratchpad>.task",
-        "RunnableAssign<agent_scratchpad>.task",
-        "ChatPromptTemplate.task",
+        "execute_task ToolsAgentOutputParser",
+        "execute_task RunnableSequence",
+        "execute_tool tavily_search_results_json",
+        "execute_task RunnableLambda",
+        "execute_task RunnableParallel<agent_scratchpad>",
+        "execute_task RunnableAssign<agent_scratchpad>",
+        "execute_task ChatPromptTemplate",
         "ChatOpenAI.chat",
-        "ToolsAgentOutputParser.task",
-        "RunnableSequence.task",
+        "execute_task ToolsAgentOutputParser",
+        "execute_task RunnableSequence",
         "AgentExecutor.workflow",
     }
 
@@ -82,21 +82,21 @@ def test_agents_with_events_with_content(
     spans = span_exporter.get_finished_spans()
 
     assert set([span.name for span in spans]) == {
-        "RunnableLambda.task",
-        "RunnableParallel<agent_scratchpad>.task",
-        "RunnableAssign<agent_scratchpad>.task",
-        "ChatPromptTemplate.task",
+        "execute_task RunnableLambda",
+        "execute_task RunnableParallel<agent_scratchpad>",
+        "execute_task RunnableAssign<agent_scratchpad>",
+        "execute_task ChatPromptTemplate",
         "ChatOpenAI.chat",
-        "ToolsAgentOutputParser.task",
-        "RunnableSequence.task",
-        "tavily_search_results_json.tool",
-        "RunnableLambda.task",
-        "RunnableParallel<agent_scratchpad>.task",
-        "RunnableAssign<agent_scratchpad>.task",
-        "ChatPromptTemplate.task",
+        "execute_task ToolsAgentOutputParser",
+        "execute_task RunnableSequence",
+        "execute_tool tavily_search_results_json",
+        "execute_task RunnableLambda",
+        "execute_task RunnableParallel<agent_scratchpad>",
+        "execute_task RunnableAssign<agent_scratchpad>",
+        "execute_task ChatPromptTemplate",
         "ChatOpenAI.chat",
-        "ToolsAgentOutputParser.task",
-        "RunnableSequence.task",
+        "execute_task ToolsAgentOutputParser",
+        "execute_task RunnableSequence",
         "AgentExecutor.workflow",
     }
 
@@ -133,7 +133,7 @@ def test_agents_with_events_with_content(
     # Validate that the ai calls the tool
     choice_event = {
         "index": 0,
-        "finish_reason": "tool_calls",
+        "finish_reason": "tool_call",
         "message": {"content": ""},
         "tool_calls": [
             {
@@ -176,28 +176,28 @@ def test_agents_with_events_with_no_content(
     spans = span_exporter.get_finished_spans()
 
     assert set([span.name for span in spans]) == {
-        "RunnableLambda.task",
-        "RunnableParallel<agent_scratchpad>.task",
-        "RunnableAssign<agent_scratchpad>.task",
-        "ChatPromptTemplate.task",
+        "execute_task RunnableLambda",
+        "execute_task RunnableParallel<agent_scratchpad>",
+        "execute_task RunnableAssign<agent_scratchpad>",
+        "execute_task ChatPromptTemplate",
         "ChatOpenAI.chat",
-        "ToolsAgentOutputParser.task",
-        "RunnableSequence.task",
-        "tavily_search_results_json.tool",
-        "RunnableLambda.task",
-        "RunnableParallel<agent_scratchpad>.task",
-        "RunnableAssign<agent_scratchpad>.task",
-        "ChatPromptTemplate.task",
+        "execute_task ToolsAgentOutputParser",
+        "execute_task RunnableSequence",
+        "execute_tool tavily_search_results_json",
+        "execute_task RunnableLambda",
+        "execute_task RunnableParallel<agent_scratchpad>",
+        "execute_task RunnableAssign<agent_scratchpad>",
+        "execute_task ChatPromptTemplate",
         "ChatOpenAI.chat",
-        "ToolsAgentOutputParser.task",
-        "RunnableSequence.task",
+        "execute_task ToolsAgentOutputParser",
+        "execute_task RunnableSequence",
         "AgentExecutor.workflow",
     }
 
     logs = log_exporter.get_finished_logs()
     assert len(logs) == 8
     assert all(
-        log.log_record.attributes.get(GenAIAttributes.GEN_AI_SYSTEM) == "langchain"
+        log.log_record.attributes.get(GenAIAttributes.GEN_AI_PROVIDER_NAME) == "langchain"
         for log in logs
     )
 
@@ -225,7 +225,7 @@ def test_agents_with_events_with_no_content(
     # Validate that the ai calls the tool
     choice_event = {
         "index": 0,
-        "finish_reason": "tool_calls",
+        "finish_reason": "tool_call",
         "message": {},
         "tool_calls": [
             {

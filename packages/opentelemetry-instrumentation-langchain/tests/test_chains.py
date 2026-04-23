@@ -51,9 +51,9 @@ def test_sequential_chain(instrument_legacy, span_exporter, log_exporter):
 
     assert [
         "OpenAI.completion",
-        "synopsis.task",
+        "execute_task synopsis",
         "OpenAI.completion",
-        "LLMChain.task",
+        "execute_task LLMChain",
         "SequentialChain.workflow",
     ] == [span.name for span in spans]
 
@@ -61,7 +61,7 @@ def test_sequential_chain(instrument_legacy, span_exporter, log_exporter):
         span for span in spans if span.name == "SequentialChain.workflow"
     )
     task_spans = [
-        span for span in spans if span.name in ["synopsis.task", "LLMChain.task"]
+        span for span in spans if span.name in ["execute_task synopsis", "execute_task LLMChain"]
     ]
     llm_spans = [span for span in spans if span.name == "OpenAI.completion"]
 
@@ -84,8 +84,8 @@ def test_sequential_chain(instrument_legacy, span_exporter, log_exporter):
         for span in llm_spans
     )
 
-    synopsis_span = next(span for span in spans if span.name == "synopsis.task")
-    review_span = next(span for span in spans if span.name == "LLMChain.task")
+    synopsis_span = next(span for span in spans if span.name == "execute_task synopsis")
+    review_span = next(span for span in spans if span.name == "execute_task LLMChain")
 
     data = json.loads(synopsis_span.attributes[SpanAttributes.TRACELOOP_ENTITY_INPUT])
     assert data["inputs"] == {
@@ -127,7 +127,8 @@ def test_sequential_chain(instrument_legacy, span_exporter, log_exporter):
         (openai_span.attributes[GenAIAttributes.GEN_AI_RESPONSE_MODEL])
         == "gpt-3.5-turbo-instruct"
     )
-    assert openai_span.attributes[f"{GenAIAttributes.GEN_AI_PROMPT}.0.content"]
+    input_messages = json.loads(openai_span.attributes[GenAIAttributes.GEN_AI_INPUT_MESSAGES])
+    assert input_messages[0]["parts"][0]["content"]
 
     logs = log_exporter.get_finished_logs()
     assert (
@@ -175,9 +176,9 @@ def test_sequential_chain_with_events_with_content(
 
     assert [
         "OpenAI.completion",
-        "synopsis.task",
+        "execute_task synopsis",
         "OpenAI.completion",
-        "LLMChain.task",
+        "execute_task LLMChain",
         "SequentialChain.workflow",
     ] == [span.name for span in spans]
 
@@ -185,7 +186,7 @@ def test_sequential_chain_with_events_with_content(
         span for span in spans if span.name == "SequentialChain.workflow"
     )
     task_spans = [
-        span for span in spans if span.name in ["synopsis.task", "LLMChain.task"]
+        span for span in spans if span.name in ["execute_task synopsis", "execute_task LLMChain"]
     ]
     llm_spans = [span for span in spans if span.name == "OpenAI.completion"]
 
@@ -296,9 +297,9 @@ def test_sequential_chain_with_events_with_no_content(
 
     assert [
         "OpenAI.completion",
-        "synopsis.task",
+        "execute_task synopsis",
         "OpenAI.completion",
-        "LLMChain.task",
+        "execute_task LLMChain",
         "SequentialChain.workflow",
     ] == [span.name for span in spans]
 
@@ -306,7 +307,7 @@ def test_sequential_chain_with_events_with_no_content(
         span for span in spans if span.name == "SequentialChain.workflow"
     )
     task_spans = [
-        span for span in spans if span.name in ["synopsis.task", "LLMChain.task"]
+        span for span in spans if span.name in ["execute_task synopsis", "execute_task LLMChain"]
     ]
     llm_spans = [span for span in spans if span.name == "OpenAI.completion"]
 
@@ -396,14 +397,14 @@ async def test_asequential_chain(instrument_legacy, span_exporter, log_exporter)
 
     assert [
         "OpenAI.completion",
-        "LLMChain.task",
+        "execute_task LLMChain",
         "OpenAI.completion",
-        "LLMChain.task",
+        "execute_task LLMChain",
         "SequentialChain.workflow",
     ] == [span.name for span in spans]
 
     synopsis_span, review_span = [
-        span for span in spans if span.name == "LLMChain.task"
+        span for span in spans if span.name == "execute_task LLMChain"
     ]
 
     data = json.loads(synopsis_span.attributes[SpanAttributes.TRACELOOP_ENTITY_INPUT])
@@ -484,9 +485,9 @@ async def test_asequential_chain_with_events_with_content(
 
     assert [
         "OpenAI.completion",
-        "LLMChain.task",
+        "execute_task LLMChain",
         "OpenAI.completion",
-        "LLMChain.task",
+        "execute_task LLMChain",
         "SequentialChain.workflow",
     ] == [span.name for span in spans]
 
@@ -569,14 +570,14 @@ async def test_asequential_chain_with_events_with_no_content(
 
     assert [
         "OpenAI.completion",
-        "LLMChain.task",
+        "execute_task LLMChain",
         "OpenAI.completion",
-        "LLMChain.task",
+        "execute_task LLMChain",
         "SequentialChain.workflow",
     ] == [span.name for span in spans]
 
     synopsis_span, review_span = [
-        span for span in spans if span.name == "LLMChain.task"
+        span for span in spans if span.name == "execute_task LLMChain"
     ]
 
     logs = log_exporter.get_finished_logs()
@@ -610,8 +611,8 @@ def test_stream(instrument_legacy, span_exporter, log_exporter):
 
     assert set(
         [
-            "PromptTemplate.task",
-            "StrOutputParser.task",
+            "execute_task PromptTemplate",
+            "execute_task StrOutputParser",
             "ChatCohere.chat",
             "RunnableSequence.workflow",
         ]
@@ -638,8 +639,8 @@ def test_stream_with_events_with_content(
 
     assert set(
         [
-            "PromptTemplate.task",
-            "StrOutputParser.task",
+            "execute_task PromptTemplate",
+            "execute_task StrOutputParser",
             "ChatCohere.chat",
             "RunnableSequence.workflow",
         ]
@@ -682,8 +683,8 @@ def test_stream_with_events_with_no_content(
 
     assert set(
         [
-            "PromptTemplate.task",
-            "StrOutputParser.task",
+            "execute_task PromptTemplate",
+            "execute_task StrOutputParser",
             "ChatCohere.chat",
             "RunnableSequence.workflow",
         ]
@@ -721,9 +722,9 @@ async def test_astream(instrument_legacy, span_exporter, log_exporter):
 
     assert set(
         [
-            "PromptTemplate.task",
+            "execute_task PromptTemplate",
             "ChatCohere.chat",
-            "StrOutputParser.task",
+            "execute_task StrOutputParser",
             "RunnableSequence.workflow",
         ]
     ) == set([span.name for span in spans])
@@ -752,9 +753,9 @@ async def test_astream_with_events_with_content(
 
     assert set(
         [
-            "PromptTemplate.task",
+            "execute_task PromptTemplate",
             "ChatCohere.chat",
-            "StrOutputParser.task",
+            "execute_task StrOutputParser",
             "RunnableSequence.workflow",
         ]
     ) == set([span.name for span in spans])
@@ -797,9 +798,9 @@ async def test_astream_with_events_with_no_content(
 
     assert set(
         [
-            "PromptTemplate.task",
+            "execute_task PromptTemplate",
             "ChatCohere.chat",
-            "StrOutputParser.task",
+            "execute_task StrOutputParser",
             "RunnableSequence.workflow",
         ]
     ) == set([span.name for span in spans])
@@ -818,7 +819,7 @@ async def test_astream_with_events_with_no_content(
 
 def assert_message_in_logs(log: ReadableLogRecord, event_name: str, expected_content: dict):
     assert log.log_record.event_name == event_name
-    assert log.log_record.attributes.get(GenAIAttributes.GEN_AI_SYSTEM) == "langchain"
+    assert log.log_record.attributes.get(GenAIAttributes.GEN_AI_PROVIDER_NAME) == "langchain"
 
     if not expected_content:
         assert not log.log_record.body

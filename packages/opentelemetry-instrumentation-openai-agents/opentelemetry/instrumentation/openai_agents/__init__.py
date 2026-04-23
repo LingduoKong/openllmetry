@@ -21,15 +21,43 @@ class OpenAIAgentsInstrumentor(BaseInstrumentor):
         self,
         exception_logger=None,
         use_legacy_attributes: bool = True,
-    ):
+        *,
+        replace_existing_processors: bool = False,
+    ) -> None:
+        """Initialize the instrumentor.
+
+        Args:
+            exception_logger: Optional exception logger for instrumentation errors.
+            use_legacy_attributes: If False, emit GenAI events instead of
+                prompt and completion span attributes.
+            replace_existing_processors:
+                If enabled, any existing trace processors
+                will be cleared before this processor is added as the only one.
+                By default, the openai-agents library has
+                a built-in tracing processor that is always active,
+                and this processor will be added alongside it,
+                resulting in traces being sent to multiple backends.
+        """
         super().__init__()
         Config.exception_logger = exception_logger
         Config.use_legacy_attributes = use_legacy_attributes
+        Config.event_logger = None
+        self._replace_existing_processors: bool = replace_existing_processors
 
     def instrumentation_dependencies(self) -> Collection[str]:
         return _instruments
 
-    def _instrument(self, **kwargs):
+    def _instrument(self, **kwargs) -> None:
+        """Override the abstract base method and instrument openai-agents.
+
+        Args:
+            tracer_provider: An optional TracerProvider to use
+                when creating a Tracer.
+            meter_provider: An optional MeterProvider to use
+                when creating a Meter.
+
+            Additional kwargs are ignored.
+        """
         tracer_provider = kwargs.get("tracer_provider")
         tracer = get_tracer(__name__, __version__, tracer_provider)
 
@@ -47,12 +75,15 @@ class OpenAIAgentsInstrumentor(BaseInstrumentor):
 
         # Use hook-based approach with OpenAI Agents SDK callbacks
         try:
-            from agents import add_trace_processor
+            from agents import add_trace_processor, set_trace_processors
             from ._hooks import OpenTelemetryTracingProcessor
 
             # Create and add our OpenTelemetry processor
             otel_processor = OpenTelemetryTracingProcessor(tracer)
-            add_trace_processor(otel_processor)
+            if self._replace_existing_processors:
+                set_trace_processors([otel_processor])
+            else:
+                add_trace_processor(otel_processor)
 
         except Exception:
             # Silently handle import errors - OpenAI Agents SDK may not be available
@@ -72,6 +103,17 @@ class OpenAIAgentsInstrumentor(BaseInstrumentor):
             unwrap_realtime_session()
         except Exception:
             pass
+
+        if self._replace_existing_processors:
+            try:
+                from agents import set_trace_processors
+
+                set_trace_processors([])
+            except Exception:
+                pass
+
+        Config.use_legacy_attributes = True
+        Config.event_logger = None
 
 
 def is_metrics_enabled() -> bool:
